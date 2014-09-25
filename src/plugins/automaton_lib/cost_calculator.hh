@@ -34,19 +34,24 @@ namespace Tempus {
 double road_travel_time( const Road::Graph& road_graph, const Road::Edge& road_e, double length, const TransportMode& mode,
                          double walking_speed = DEFAULT_WALKING_SPEED, double cycling_speed = DEFAULT_CYCLING_SPEED )
 {
-    if ( (road_graph[ road_e ].traffic_rules() & mode.traffic_rules()) == 0 ) // Not allowed mode 
+    if ( (road_graph[ road_e ].traffic_rules() & mode.traffic_rules()) == 0 ) { // Not allowed mode 
         return std::numeric_limits<double>::infinity() ;
-    else if ( mode.traffic_rules() & TrafficRuleCar )
+    }
+    else if ( mode.traffic_rules() & TrafficRuleCar ) {
         // FIXME, we take the speed limit for now,
         // but should take the speed profile
         return length / (road_graph[ road_e ].car_speed_limit() * 1000) * 60 ;
-    else if ( mode.traffic_rules() & TrafficRulePedestrian ) // Walking
+    }
+    else if ( mode.traffic_rules() & TrafficRulePedestrian ) { // Walking
         // FIXME the speed should be carried by the transport mode
-        return length / (walking_speed * 1000) * 60 ; 
-    else if ( mode.traffic_rules() & TrafficRuleBicycle ) // Bicycle
-        return length / (cycling_speed * 1000) * 60 ; 
-    else
+        return length / (walking_speed * 1000) * 60 ;
+    }
+    else if ( mode.traffic_rules() & TrafficRuleBicycle ) { // Bicycle
+        return length / (cycling_speed * 1000) * 60 ;
+    }
+    else {
         return std::numeric_limits<double>::max() ;
+    }
 }
 
 // Turning movement penalty function
@@ -82,11 +87,12 @@ public:
     CostCalculator( TimetableMap& timetable, FrequencyMap& frequency, 
                     const std::vector<db_id_t>& allowed_transport_modes, std::map<Multimodal::Vertex, db_id_t>& vehicle_nodes, 
                     double walking_speed, double cycling_speed, 
-                    double min_transfer_time, double car_parking_search_time ) : 
+                    double min_transfer_time, double car_parking_search_time, boost::optional<Road::Vertex> private_parking ) : 
         timetable_( timetable ), frequency_( frequency ), 
         allowed_transport_modes_( allowed_transport_modes ), vehicle_nodes_( vehicle_nodes ), 
         walking_speed_( walking_speed ), cycling_speed_( cycling_speed ), 
-        min_transfer_time_( min_transfer_time ), car_parking_search_time_( car_parking_search_time )  { }; 
+        min_transfer_time_( min_transfer_time ), car_parking_search_time_( car_parking_search_time ),
+        private_parking_( private_parking ) { }; 
 		
     // Multimodal travel time function
     double travel_time( const Multimodal::Graph& graph, const Multimodal::Edge& e, db_id_t mode_id, double initial_time, db_id_t initial_trip_id, db_id_t& final_trip_id, double& wait_time ) const
@@ -96,8 +102,9 @@ public:
         {
             switch ( e.connection_type() ) {  
             case Multimodal::Edge::Road2Road: {
-                return road_travel_time( graph.road(), e.road_edge(), graph.road()[ e.road_edge() ].length(), mode,
+                double c = road_travel_time( graph.road(), e.road_edge(), graph.road()[ e.road_edge() ].length(), mode,
                                          walking_speed_, cycling_speed_ ); 
+                return c;
             }
                 break;
 		
@@ -234,12 +241,15 @@ public:
     }
 		
     // Mode transfer time function : returns numeric_limits<double>::max() when the mode transfer is impossible
-    double transfer_time( const Multimodal::Graph& graph, const Multimodal::Vertex& src, const Multimodal::Vertex& tgt, db_id_t initial_mode_id, db_id_t final_mode_id ) const
+    double transfer_time( const Multimodal::Graph& graph, const Multimodal::Edge& edge, db_id_t initial_mode_id, db_id_t final_mode_id ) const
     {
         double transf_t = 0;
         if (initial_mode_id == final_mode_id ) {
             return 0;
         }
+
+        const Multimodal::Vertex& src = edge.source();
+        const Multimodal::Vertex& tgt = edge.target();
 
         const TransportMode& initial_mode = graph.transport_modes().find( initial_mode_id )->second;
         const TransportMode& final_mode = graph.transport_modes().find( final_mode_id )->second;
@@ -255,11 +265,15 @@ public:
         }
         // Parking search time for initial mode
         else if ( ( transf_t < std::numeric_limits<double>::max() ) && initial_mode.need_parking() ) {
-            if ( ( ( src.type() == Multimodal::Vertex::Road )  &&
-                   ( (graph.road()[ src.road_vertex() ].parking_traffic_rules() & initial_mode.traffic_rules() ) > 0 ) )
-                 || ( (src.type() == Multimodal::Vertex::Poi ) && ( src.poi()->has_parking_transport_mode( initial_mode.db_id() )) ) )
-            {
+            if ( (tgt.type() == Multimodal::Vertex::Poi ) && ( tgt.poi()->has_parking_transport_mode( initial_mode.db_id() ) ) ) {
                 // FIXME more complex than that
+                if (initial_mode.traffic_rules() & TrafficRuleCar ) 
+                    transf_t += car_parking_search_time_ ; // Personal car
+                // For bicycle, parking search time = 0
+            }
+            // park on streets
+            else if ( ( tgt.type() == Multimodal::Vertex::Road ) && (src.type() == Multimodal::Vertex::Road) &&
+                      ( (graph.road()[ edge.road_edge() ].parking_traffic_rules() & initial_mode.traffic_rules()) > 0 ) ) {
                 if (initial_mode.traffic_rules() & TrafficRuleCar ) 
                     transf_t += car_parking_search_time_ ; // Personal car
                 // For bicycle, parking search time = 0
@@ -281,10 +295,13 @@ public:
             }
         }
         // Taking vehicle time for final mode 
-        // FIXME add private parking location test
         else if ( ( transf_t < std::numeric_limits<double>::max() ) && ( final_mode.need_parking() ) ) {
-            if (( src.type() == Multimodal::Vertex::Poi ) && ( src.poi()->has_parking_transport_mode( final_mode.db_id() ) )) {
-                // vehicles parked on a POI
+            if (( src.type() == Multimodal::Vertex::Poi ) && final_mode.is_shared() && ( src.poi()->has_parking_transport_mode( final_mode.db_id() ) )) {
+                // shared vehicles parked on a POI
+                transf_t += 1;
+            }
+            else if ( private_parking_ && !final_mode.is_shared() && src.road_vertex() == private_parking_.get() ) {
+                // vehicles parked on the private parking
                 transf_t += 1;
             }
             else {
@@ -304,6 +321,7 @@ protected:
     double cycling_speed_; 
     double min_transfer_time_; 
     double car_parking_search_time_; 
+    boost::optional<Road::Vertex> private_parking_;
 }; 
 
 }

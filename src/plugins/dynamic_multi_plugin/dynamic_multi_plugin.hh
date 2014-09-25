@@ -30,7 +30,7 @@ namespace Tempus {
 struct Triple {
     Multimodal::Vertex vertex;
     Automaton<Road::Edge>::Graph::vertex_descriptor state; 
-    unsigned int mode; 
+    db_id_t mode; 
 	
     bool operator==( const Tempus::Triple& t ) const {
         return (vertex == t.vertex) && (state == t.state) && (mode == t.mode);
@@ -97,6 +97,8 @@ protected:
     PredecessorMap pred_map_; 
     PotentialMap wait_map_; 
     TripMap trip_map_; 
+
+    Road::Vertex parking_location_;
 
     static StaticVariables s_;
 	
