@@ -644,11 +644,7 @@ CREATE OR REPLACE VIEW tempus.pt_stop_by_network AS
  pt_route.transport_mode, pt_stop.road_section_id, pt_stop.zone_id, pt_stop.abscissa_road_section, pt_stop.geom, pt_network.id AS network_id
    FROM tempus.pt_stop, tempus.pt_section, tempus.pt_network, tempus.pt_route, tempus.pt_trip, tempus.pt_stop_time, tempus.pt_frequency
   WHERE pt_network.id = pt_section.network_id AND (pt_section.stop_from = pt_stop.id OR pt_section.stop_to = pt_stop.id)
-<<<<<<< HEAD
-  AND pt_route.id = pt_trip.route_id AND (pt_trip.id = pt_stop_time.trip_id AND pt_stop_time.stop_id = pt_stop.id); 
-=======
   AND pt_route.id = pt_trip.route_id AND (pt_trip.id = pt_stop_time.trip_id AND pt_stop_time.stop_id = pt_stop.id);
->>>>>>> 5a195ce91487eb48733ecfdfd5a0543a676c8de8
 
 -- delete stops not involved in a section and not parent of another stop
 delete from tempus.pt_stop
