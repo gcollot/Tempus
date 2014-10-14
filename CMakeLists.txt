@@ -53,7 +53,7 @@ endif()
 set(CPACK_PACKAGE_NAME "tempus")
 set(CPACK_PACKAGE_VENDOR "IFSTTAR")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Tempus - manipulate transport graphs")
-set(CPACK_PACKAGE_VERSION "1.1-rc1")
+set(CPACK_PACKAGE_VERSION "1.1-rc5")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "tempus-${CPACK_PACKAGE_VERSION}")
 set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE)
 set(CPACK_COMPONENT_LIBRARIES_DISPLAY_NAME "Libraries")
@@ -66,6 +66,9 @@ set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
    !include 'winmessages.nsh'
    WriteRegExpandStr HKLM 'SYSTEM\\\\CurrentControlSet\\\\Control\\\\Session Manager\\\\Environment' TEMPUS_DATA_DIRECTORY $INSTDIR\\\\data
    SendMessage \\\${HWND_BROADCAST} \\\${WM_WININICHANGE} 0 'STR:Environment' /TIMEOUT=5000
+   
+   ; update startTempus location
+   WriteRegExpandStr HKCU 'Software\\\\QGIS\\\\QGIS2\\\\IfsttarTempus' startTempus $INSTDIR\\\\bin\\\\startTempus.bat
    
   ; **** INSTALL POSTGRESQL ***
   MessageBox MB_YESNO 'Install PostgreSQL 9.3 database server ?' /SD IDYES IDNO endPostgres
@@ -80,15 +83,15 @@ set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
   endPostgres:
   
   ; **** INSTALL QGIS ***
-  MessageBox MB_YESNO 'Install QGIS 2.0 ?' /SD IDYES IDNO endQGIS
-    NSISdl::download  http://qgis.org/downloads/QGIS-OSGeo4W-2.0.1-2-Setup-x86.exe $INSTDIR\\\\QGIS-OSGeo4W-2.0.1-2-Setup-x86.exe
-    IfFileExists QGIS-OSGeo4W-2.0.1-2-Setup-x86.exe QgisExists QgisMissing
+  MessageBox MB_YESNO 'Install QGIS 2.4 ?' /SD IDYES IDNO endQGIS
+    NSISdl::download  http://qgis.org/downloads/QGIS-OSGeo4W-2.4.0-1-Setup-x86.exe $INSTDIR\\\\QGIS-OSGeo4W-2.4.0-1-Setup-x86.exe
+    IfFileExists QGIS-OSGeo4W-2.4.0-1-Setup-x86.exe QgisExists QgisMissing
     QgisExists:
-       ExecWait QGIS-OSGeo4W-2.0.1-2-Setup-x86.exe
-       Delete QGIS-OSGeo4W-2.0.1-2-Setup-x86.exe
+       ExecWait QGIS-OSGeo4W-2.4.0-1-Setup-x86.exe
+       Delete QGIS-OSGeo4W-2.4.0-1-Setup-x86.exe
        Goto endQGIS
     QgisMissing:
-       MessageBox MB_OK 'Unable to download QGIS 2.0' 
+       MessageBox MB_OK 'Unable to download QGIS 2.4' 
   endQGIS:
   
   ; *** INSTALL NGINX ***
@@ -106,9 +109,9 @@ set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
   ExecWait `reset_tempus_test_db.bat`
 
   ; *** INSTALL AND START WPS SERVICE ***
-  ExecWait `gen_wps_service_xml.bat`
-  ExecWait `wps_service.exe install`
-  ExecWait `net start wps`
+  ;ExecWait `gen_wps_service_xml.bat`
+  ;ExecWait `wps_service.exe install`
+  ;ExecWait `net start wps`
   
   ; *** INSTALL PLUGINS IN USER .qgis DIRECTORY ***
   ExecWait `install_qgis_plugins.bat`
@@ -116,12 +119,13 @@ set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
 )
 set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
   DeleteRegValue HKLM 'SYSTEM\\\\CurrentControlSet\\\\Control\\\\Session Manager\\\\Environment' TEMPUS_DATA_DIRECTORY
-  ExecWait `net stop wps`
-  ExecWait `\\\$INSTDIR\\\\wps_service.exe uninstall`
-  Delete \\\$INSTDIR\\\\wps_service.err.log
-  Delete \\\$INSTDIR\\\\wps_service.out.log
-  Delete \\\$INSTDIR\\\\wps_service.wrapper.log
-  Delete \\\$INSTDIR\\\\wps_service.xml
+  ;ExecWait `net stop wps`
+  ;ExecWait `\\\$INSTDIR\\\\wps_service.exe uninstall`
+  ;Delete \\\$INSTDIR\\\\wps_service.err.log
+  ;Delete \\\$INSTDIR\\\\wps_service.out.log
+  ;Delete \\\$INSTDIR\\\\wps_service.wrapper.log
+  ;Delete \\\$INSTDIR\\\\wps_service.xml
+  Delete \\\$INSTDIR\\\\data\\\\tempus_test_db.sql
   RMDir \\\$INSTDIR
 ")
 #Push `TEMPUS_DATA_DIRECTORY`
@@ -143,7 +147,7 @@ if (WIN32)
    
    file(GLOB intldll ${PostgreSQL_LIBRARY_DIRS}/../bin/libintl*.dll)
    file(GLOB iconvdll ${PostgreSQL_LIBRARY_DIRS}/../bin/*iconv*.dll)
-   install(FILES win32/nginx-1.5.6.exe win32/wps_service.exe win32/gen_wps_service_xml.bat win32/vcredist_x86.exe win32/reset_tempus_test_db.bat win32/install_qgis_plugins.bat DESTINATION .)
+   install(FILES win32/nginx-1.5.6.exe win32/wps_service.exe win32/gen_wps_service_xml.bat win32/vcredist_x86.exe win32/reset_tempus_test_db.bat win32/install_qgis_plugins.bat win32/unzip.vbs DESTINATION .)
    install(FILES 
       ${PostgreSQL_LIBRARY_DIRS}/libpq.dll 
       ${PostgreSQL_LIBRARY_DIRS}/../bin/zlib1.dll 
@@ -179,16 +183,15 @@ if(BUILD_DOC)
 endif()
 
 if (WIN32)
-  configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/script/startTempus.bat.in ${CMAKE_CURRENT_BINARY_DIR}/script/startTempus.bat )
   install(
-    FILES ${CMAKE_CURRENT_BINARY_DIR}/script/startTempus.bat
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+    FILES script/startTempus.bat
+    DESTINATION bin
     )
 else()
   configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/script/startTempus.sh.in ${CMAKE_CURRENT_BINARY_DIR}/script/startTempus.sh )
   install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/script/startTempus.sh
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+    DESTINATION bin
     PERMISSIONS OWNER_EXECUTE OWNER_READ OWNER_WRITE GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ
     )
 endif()

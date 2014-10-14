@@ -209,6 +209,7 @@ class IfsttarRouting:
         self.dlg.ui.stopServerBtn.clicked.connect( self.onStopServer )
 
         QObject.connect(self.dlg.ui.computeBtn, SIGNAL("clicked()"), self.onCompute)
+        QObject.connect(self.dlg.ui.resetBtn, SIGNAL("clicked()"), self.onReset)
         QObject.connect(self.dlg.ui.verticalTabWidget, SIGNAL("currentChanged( int )"), self.onTabChanged)
 
         QObject.connect( self.dlg.ui.pluginCombo, SIGNAL("currentIndexChanged(int)"), self.update_plugin_options )
@@ -246,9 +247,9 @@ class IfsttarRouting:
         # init server configuration from settings
         s = QSettings()
         self.dlg.ui.tempusBinPathEdit.setText( s.value("IfsttarTempus/startTempus", "/usr/local/bin/startTempus.sh" ) )
-        self.dlg.ui.dbOptionsEdit.setText( s.value("IfsttarTempus/dbOptions", "dbname=tempus_test_db" ) )
+        self.dlg.ui.dbOptionsEdit.setText( s.value("IfsttarTempus/dbOptions", "dbname=tempus_test_db user=postgres" ) )
         self.dlg.ui.schemaNameEdit.setText( s.value("IfsttarTempus/schemaName", "tempus" ) )
-        plugins = s.value("IfsttarTempus/plugins", ["sample_road_plugin", "sample_multi_plugin"] )
+        plugins = s.value("IfsttarTempus/plugins", ["sample_road_plugin", "sample_multi_plugin", "dynamic_multi_plugin"] )
         for p in plugins:
             item = QListWidgetItem( p )
             item.setFlags( item.flags() | Qt.ItemIsEditable )
@@ -448,8 +449,8 @@ class IfsttarRouting:
         # 'Query' tab
         elif tab == 2:
                 # prepare for a new query
-                self.dlg.reset()
-#                self.displayTransportAndNetworks()
+#            self.dlg.reset()
+            self.dlg.inQuery()
 
     def loadHistory( self ):
         #
@@ -619,10 +620,10 @@ class IfsttarRouting:
 
         for step in roadmap:
             if first:
-                    text = "Initial mode: %s<br/>\n" % self.transport_modes_dict[step.mode].name
-                    first = False
+                text = "Initial mode: %s<br/>\n" % self.transport_modes_dict[step.mode].name
+                first = False
             else:
-                    text = ''
+                text = ''
             icon_text = ''
             cost_text = ''
 
@@ -830,7 +831,8 @@ class IfsttarRouting:
         clearBoxLayout( self.dlg.ui.resultSelectionLayout )
         k = 1
         for result in results:
-            name = "%s%d" % (ROADMAP_LAYER_NAME,k)
+            start = "%02d:%02d:%02d" % (result.starting_date_time.hour,result.starting_date_time.minute,result.starting_date_time.second)
+            name = "%s%d (start: %s)" % (ROADMAP_LAYER_NAME,k, start)
             rselect = ResultSelection()
             rselect.setText( name )
             for k,v in result.costs.iteritems():
@@ -860,6 +862,11 @@ class IfsttarRouting:
                 self.currentRoadmap = i
                 self.dlg.ui.showElevationsBtn.show()
                 break
+
+
+    def onReset( self ):
+        # reset prefs
+        self.dlg.reset_prefs()
 
     #
     # When the 'compute' button gets clicked

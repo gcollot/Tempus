@@ -20,6 +20,8 @@
 #include "db.hh"
 #include "pgsql_importer.hh"
 #include "multimodal_graph.hh"
+#include "reverse_multimodal_graph.hh"
+#include "utils/graph_db_link.hh"
 
 #include <iostream>
 #include <string>
@@ -240,6 +242,9 @@ BOOST_AUTO_TEST_CASE( testMultimodal )
     {
         Multimodal::VertexIterator vi, vi_end;
 
+        size_t totalOut = 0;
+        size_t totalIn = 0;
+
         for ( boost::tie( vi, vi_end ) = vertices( *graph ); vi != vi_end; vi++ ) {
             Multimodal::OutEdgeIterator oei, oei_end;
             boost::tie( oei, oei_end ) = out_edges( *vi, *graph );
@@ -251,7 +256,27 @@ BOOST_AUTO_TEST_CASE( testMultimodal )
 
             size_t out_deg2 = out_degree( *vi, *graph );
             BOOST_CHECK_EQUAL( out_deg, out_deg2 );
+
+            Multimodal::InEdgeIterator iei, iei_end;
+            boost::tie( iei, iei_end ) = in_edges( *vi, *graph );
+            size_t in_deg = 0;
+
+            for ( ; iei != iei_end; iei++ ) {
+                in_deg++;
+            }
+
+            size_t in_deg2 = in_degree( *vi, *graph );
+
+            BOOST_CHECK_EQUAL( in_deg, in_deg2 );
+
+            size_t deg = degree( *vi, *graph );
+            BOOST_CHECK_EQUAL( deg, in_deg + out_deg );
+
+            totalOut += out_deg;
+            totalIn += in_deg;
         }
+
+        BOOST_CHECK_EQUAL( totalOut, totalIn );
     }
     size_t ne = 0;
     size_t n_road2road = 0;
@@ -474,6 +499,157 @@ std::cout << "n_poi2road = " << n_poi2road << " pois.size = " << graph->pois().s
 
 BOOST_AUTO_TEST_SUITE_END()
 
+BOOST_AUTO_TEST_SUITE( tempus_core_reverse_road )
+
+std::auto_ptr<PQImporter> importer( new PQImporter( g_db_options + " dbname = " + g_db_name ) );
+
+std::auto_ptr<Multimodal::Graph> graph;
+
+BOOST_AUTO_TEST_CASE( testReverseRoad )
+{
+    std::cout << "PgImporterTest::testReverseRoad()" << std::endl;
+    TextProgression progression;
+    graph = importer->import_graph( progression );
+    importer->import_constants( *graph, progression );
+
+    Road::ReverseGraph rroad( graph->road() );
+    const Road::Graph& road = graph->road();
+
+    Road::VertexIterator vi, vi_end;
+    
+    for ( boost::tie( vi, vi_end ) = vertices( road ); vi != vi_end; vi++ ) {
+        BOOST_CHECK_EQUAL( out_degree( *vi, road ), in_degree( *vi, rroad ) );
+        Road::OutEdgeIterator oei, oei_end;
+        Road::OutEdgeIterator roei, roei_end;
+        boost::tie( oei, oei_end ) = out_edges( *vi, road );
+        boost::tie( roei, roei_end ) = in_edges( *vi, rroad );
+        while ( oei != oei_end ) {
+            BOOST_CHECK_EQUAL( *oei == *roei, true );
+            BOOST_CHECK_EQUAL( source( *oei, road ), target( *roei, rroad ) );
+            BOOST_CHECK_EQUAL( target( *oei, road ), source( *roei, rroad ) );
+            oei++;
+            roei++;
+        }
+    }
+
+    Road::EdgeIterator ei, ei_end;
+    for ( boost::tie(ei, ei_end) = edges( road ); ei != ei_end; ei++ ) {
+        // check access to opeartor[](e)
+        BOOST_CHECK_EQUAL(road[*ei].db_id(), rroad[*ei].db_id());
+        // check that edges are reversed
+        BOOST_CHECK_EQUAL( source( *ei, road ), target( *ei, rroad ) );
+        BOOST_CHECK_EQUAL( target( *ei, road ), source( *ei, rroad ) );
+        // check access to opeartor[](v)
+        BOOST_CHECK_EQUAL( road[source(*ei, road)].db_id(), rroad[target(*ei, rroad)].db_id());
+    }
+    BOOST_CHECK_EQUAL( num_vertices( road ), num_vertices( rroad ) );
+    BOOST_CHECK_EQUAL( num_edges( road ), num_edges( rroad ) );    
+
+}
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE( tempus_core_reverse_multimodal )
+
+std::auto_ptr<PQImporter> importer( new PQImporter( g_db_options + " dbname = " + g_db_name ) );
+
+std::auto_ptr<Multimodal::Graph> graph;
+
+BOOST_AUTO_TEST_CASE( testReverseMultimodal )
+{
+    std::cout << "PgImporterTest::testReverseMultimodal()" << std::endl;
+    TextProgression progression;
+    graph = importer->import_graph( progression );
+    importer->import_constants( *graph, progression );
+
+    Multimodal::ReverseGraph rgraph( *graph );
+    Multimodal::VertexIterator vi, vi_end;
+    
+    for ( boost::tie( vi, vi_end ) = vertices( *graph ); vi != vi_end; vi++ ) {
+        BOOST_CHECK_EQUAL( out_degree( *vi, *graph ), in_degree( *vi, rgraph ) );
+        Multimodal::OutEdgeIterator oei, oei_end;
+        Multimodal::OutEdgeIterator roei, roei_end;
+        boost::tie( oei, oei_end ) = out_edges( *vi, *graph );
+        boost::tie( roei, roei_end ) = in_edges( *vi, rgraph );
+        while ( oei != oei_end ) {
+            BOOST_CHECK_EQUAL( *oei == *roei, true );
+            BOOST_CHECK_EQUAL( source( *oei, *graph ), target( *roei, rgraph ) );
+            BOOST_CHECK_EQUAL( target( *oei, *graph ), source( *roei, rgraph ) );
+            oei++;
+            roei++;
+        }
+        Multimodal::InEdgeIterator iei, iei_end;
+        Multimodal::InEdgeIterator riei, riei_end;
+        boost::tie( iei, iei_end ) = in_edges( *vi, *graph );
+        boost::tie( riei, riei_end ) = out_edges( *vi, rgraph );
+        while ( iei != iei_end ) {
+            BOOST_CHECK_EQUAL( *iei == *riei, true );
+            BOOST_CHECK_EQUAL( source( *iei, *graph ), target( *riei, rgraph ) );
+            BOOST_CHECK_EQUAL( target( *iei, *graph ), source( *riei, rgraph ) );
+            iei++;
+            riei++;
+        }
+    }
+
+    // find a PT vertex and a POI
+    // store their out_edges
+    // check for in_edges of each out_edges
+    Multimodal::Vertex ptv, poiv;
+    Multimodal::VertexIterator vit, vend;
+    for (boost::tie(vit, vend) = vertices(*graph); vit != vend; vit++ ) {
+        if ( vit->type() == Multimodal::Vertex::PublicTransport ) {
+            ptv = *vit;
+            break;
+        }
+    }
+    for (boost::tie(vit, vend) = vertices(*graph); vit != vend; vit++ ) {
+        if ( vit->type() == Multimodal::Vertex::Poi ) {
+            poiv = *vit;
+            break;
+        }
+    }
+
+    std::vector<Multimodal::Vertex> pt_oedges, poi_oedges;
+    Multimodal::OutEdgeIterator oe, oe_end;
+    for (boost::tie(oe, oe_end) = out_edges( ptv, *graph ); oe != oe_end; oe++ ) {
+        Multimodal::Vertex v = target(*oe, *graph);
+        pt_oedges.push_back( v );
+    }
+    for (boost::tie(oe, oe_end) = out_edges( poiv, *graph ); oe != oe_end; oe++ ) {
+        Multimodal::Vertex v = target(*oe, *graph);
+        poi_oedges.push_back( v );
+    }
+
+    // look for in_edges of each out_edge
+    for ( size_t i = 0; i < pt_oedges.size(); i++ ) {
+        Multimodal::InEdgeIterator ie, ie_end;
+        bool found = false;
+        for (boost::tie(ie, ie_end) = in_edges( pt_oedges[i], *graph ); ie != ie_end; ie++ ) {
+            Multimodal::Vertex v = source(*ie, *graph);
+            if ( v == ptv ) {
+                found = true;
+                break;
+            }
+        }
+        BOOST_CHECK_EQUAL( found, true );
+    }
+    for ( size_t i = 0; i < poi_oedges.size(); i++ ) {
+        Multimodal::InEdgeIterator ie, ie_end;
+        bool found = false;
+        for (boost::tie(ie, ie_end) = in_edges( poi_oedges[i], *graph ); ie != ie_end; ie++ ) {
+            Multimodal::Vertex v = source(*ie, *graph);
+            if ( v == poiv ) {
+                found = true;
+                break;
+            }
+        }
+        BOOST_CHECK_EQUAL( found, true );
+    }
+
+    BOOST_CHECK_EQUAL( num_vertices( *graph ), num_vertices( rgraph ) );
+    BOOST_CHECK_EQUAL( num_edges( *graph ), num_edges( rgraph ) );
+    
+}
+BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE( tempus_road_restrictions )
 
@@ -488,7 +664,7 @@ BOOST_AUTO_TEST_CASE( testRestrictions )
     importer->import_constants( *graph, progression );
 
     // restriction nodes
-    db_id_t expected_nodes[][4] = { { 22587, 22510, 22451, 0 },
+    db_id_t expected_nodes[][4] = { { 22814, 22783, 22512, 0 },
                                     { 21906, 21934, 21993, 21987 },
                                     // forbidden u-turn :
                                     { 21934, 21906, 21934, 0 },
@@ -517,5 +693,3 @@ BOOST_AUTO_TEST_CASE( testRestrictions )
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-
-

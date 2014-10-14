@@ -138,8 +138,8 @@ public:
     /// Inherits from Step as well as from Multimodal::Edge
     /// This is used to represent a step from a mode to another (road, public transport, poi, etc)
     struct TransferStep : public Step, public Multimodal::Edge {
-        TransferStep() : Step( Step::TransferStep ), Edge() {}
-        TransferStep( const Multimodal::Edge& edge ) : Step( Step::TransferStep ), Edge( edge ) {}
+        TransferStep() : Step( Step::TransferStep ), Multimodal::Edge() {}
+        TransferStep( const Multimodal::Edge& edge ) : Step( Step::TransferStep ), Multimodal::Edge( edge ) {}
 
         /// Final transport mode id
         DECLARE_RW_PROPERTY( final_mode, db_id_t );
@@ -168,6 +168,9 @@ public:
 
     /// Add a step
     void add_step( std::auto_ptr<Step> step );
+
+    /// Starting date time
+    DECLARE_RW_PROPERTY( starting_date_time, DateTime );
 
 private:
     StepList steps_;

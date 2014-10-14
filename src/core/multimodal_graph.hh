@@ -37,12 +37,15 @@ namespace Tempus {
 namespace Multimodal {
 class VertexIterator;
 class OutEdgeIterator;
+class InEdgeIterator;
 class EdgeIterator;
-}
+
 // For debugging purposes
-std::ostream& operator<<( std::ostream& ostr, const Multimodal::VertexIterator& it );
-std::ostream& operator<<( std::ostream& ostr, const Multimodal::OutEdgeIterator& it );
-std::ostream& operator<<( std::ostream& ostr, const Multimodal::EdgeIterator& it );
+std::ostream& operator<<( std::ostream& ostr, const VertexIterator& it );
+std::ostream& operator<<( std::ostream& ostr, const OutEdgeIterator& it );
+std::ostream& operator<<( std::ostream& ostr, const InEdgeIterator& it );
+std::ostream& operator<<( std::ostream& ostr, const EdgeIterator& it );
+}
 }
 
 namespace Tempus {
@@ -95,6 +98,9 @@ public:
     /// @returns the POI, if it's a POI, or 0
     const POI* poi() const;
 
+    /// @returns the coordinates, whatever the vertex type
+    Point3D coordinates() const;
+
 private:
     struct RoadVertex_
     {
@@ -122,6 +128,33 @@ private:
             return graph == other.graph ? vertex < other.vertex : graph < other.graph;
         }
     };
+
+    template <class T, class Visitor>
+    struct ProxyVisitor : public boost::static_visitor<T>
+    {
+        Visitor visitor_;
+        ProxyVisitor( Visitor visitor ) : visitor_(visitor) {}
+        T operator()(const RoadVertex_& r ) const
+        {
+            return visitor_( *r.graph, r.vertex );
+        }
+        T operator()(const PtVertex_& r ) const
+        {
+            return visitor_( *r.graph, r.vertex );
+        }
+        T operator()(const POI* p ) const
+        {
+            return visitor_( *p );
+        }
+    };
+
+    template <class T, class Visitor>
+    T apply_visitor_( Visitor v ) const
+    {
+        ProxyVisitor<T,Visitor> pv(v);
+        return boost::apply_visitor( pv, union_ );
+    }
+
     bool is_null_;
     boost::variant< RoadVertex_, PtVertex_, const POI * > union_;
 };
@@ -208,13 +241,14 @@ struct Graph: boost::noncopyable {
     typedef Tempus::Multimodal::Vertex          vertex_descriptor;
     typedef Tempus::Multimodal::Edge            edge_descriptor;
     typedef Tempus::Multimodal::OutEdgeIterator out_edge_iterator;
+    typedef Tempus::Multimodal::InEdgeIterator  in_edge_iterator;
     typedef Tempus::Multimodal::VertexIterator  vertex_iterator;
     typedef Tempus::Multimodal::EdgeIterator    edge_iterator;
 
-    typedef boost::directed_tag                 directed_category;
+    typedef boost::bidirectional_tag            directed_category;
 
     typedef boost::disallow_parallel_edge_tag   edge_parallel_category;
-    typedef boost::incidence_graph_tag          traversal_category;
+    typedef boost::bidirectional_graph_tag      traversal_category;
 
     typedef size_t vertices_size_type;
     typedef size_t edges_size_type;
@@ -222,7 +256,6 @@ struct Graph: boost::noncopyable {
 
     // unused types (here to please boost::graph_traits<>)
     typedef void adjacency_iterator;
-    typedef void in_edge_iterator;
 
     static inline vertex_descriptor null_vertex() {
         return vertex_descriptor();   // depending on boost version, this can be useless
@@ -345,7 +378,7 @@ protected:
     PublicTransport::VertexIterator pt_it_, pt_it_end_;
     const Multimodal::Graph* graph_;
 
-    friend std::ostream& Tempus::operator<<( std::ostream& ostr, const Multimodal::VertexIterator& it );
+    friend std::ostream& operator<<( std::ostream& ostr, const Multimodal::VertexIterator& it );
 };
 
 ///
@@ -415,7 +448,66 @@ protected:
     /// 2: out of the connection
     int poi2road_connection_;
 
-    friend std::ostream& Tempus::operator<<( std::ostream& ostr, const OutEdgeIterator& it );
+    friend std::ostream& operator<<( std::ostream& ostr, const OutEdgeIterator& it );
+};
+
+class InEdgeIterator :
+    public boost::iterator_facade< InEdgeIterator,
+    Multimodal::Edge,
+    boost::forward_traversal_tag,
+/* reference */ Multimodal::Edge> {
+public:
+    InEdgeIterator() : graph_( 0 ) {}
+    InEdgeIterator( const Multimodal::Graph& graph, Multimodal::Vertex source );
+
+    void to_end();
+    Multimodal::Edge dereference() const;
+    void increment();
+    bool equal( const InEdgeIterator& v ) const;
+protected:
+    ///
+    /// The source vertex
+    Multimodal::Vertex source_;
+
+    ///
+    /// The underlying graph
+    const Multimodal::Graph* graph_;
+
+    ///
+    /// A pair of out edge iterators for road vertices
+    Road::InEdgeIterator road_it_, road_it_end_;
+
+    ///
+    /// A pair of out edge iterators for public transport vertices
+    PublicTransport::InEdgeIterator pt_it_, pt_it_end_;
+
+    ///
+    /// A counter used to represent position on a Transport2Road connection.
+    /// Indeed, a transport stop is linked to a road section and thus to 2 road nodes.
+    /// 0: on the node_from of the associated road section
+    /// 1: on the node_to
+    /// 2: out of the connection
+    size_t stop_from_road_connection_;
+
+    ///
+    /// A counter used to represent position on a Road2Transport connection.
+    /// A road node can be linked to 0..N public transport nodes (@relates Road::Section::stops)
+    int road_from_stop_connection_;
+
+    ///
+    /// A counter used to represent position on a Road2Poi connection.
+    /// A road node can be linked to 0..N POI (@relates Road::Section::pois)
+    int road_from_poi_connection_;
+
+    ///
+    /// A counter used to represent position on a Poi2Road connection.
+    /// Indeed, a POI is linked to a road section and thus to 2 road nodes.
+    /// 0: on the node_from of the associated road section
+    /// 1: on the node_to
+    /// 2: out of the connection
+    int poi_from_road_connection_;
+
+    friend std::ostream& operator<<( std::ostream& ostr, const InEdgeIterator& it );
 };
 
 ///
@@ -450,7 +542,7 @@ protected:
     /// A pair of OutEdgeIterator
     Multimodal::OutEdgeIterator ei_, ei_end_;
 
-    friend std::ostream& Tempus::operator<<( std::ostream& ostr, const EdgeIterator& it );
+    friend std::ostream& operator<<( std::ostream& ostr, const EdgeIterator& it );
 };
 
 ///
@@ -501,8 +593,17 @@ std::pair<EdgeIterator, EdgeIterator> edges( const Graph& graph );
 /// Returns a range of EdgeIterator that allows to iterate on out edges of a vertex. Constant time
 std::pair<OutEdgeIterator, OutEdgeIterator> out_edges( const Vertex& v, const Graph& graph );
 ///
+/// Returns a range of EdgeIterator that allows to iterate on in edges of a vertex. Constant time
+std::pair<InEdgeIterator, InEdgeIterator> in_edges( const Vertex& v, const Graph& graph );
+///
 /// Number of out edges for a vertex.
 size_t out_degree( const Vertex& v, const Graph& graph );
+///
+/// Number of in edges for a vertex.
+size_t in_degree( const Vertex& v, const Graph& graph );
+///
+/// Number of out and in edges for a vertex.
+size_t degree( const Vertex& v, const Graph& graph );
 
 ///
 /// Find an edge, based on a source and target vertex.
@@ -518,8 +619,11 @@ size_t get( const VertexIndexProperty& p, const Multimodal::Vertex& v );
 }
 
 namespace Tempus {
-std::ostream& operator<<( std::ostream& out, const Multimodal::Vertex& v );
-std::ostream& operator<<( std::ostream& out, const Multimodal::Edge& v );
+
+namespace Multimodal {
+std::ostream& operator<<( std::ostream& out, const Vertex& v );
+std::ostream& operator<<( std::ostream& out, const Edge& v );
+}
 
 ///
 /// Tests if a vertex exists. Works for Road::Vertex, PublicTransport::Vertex and Multimodal::Vertex

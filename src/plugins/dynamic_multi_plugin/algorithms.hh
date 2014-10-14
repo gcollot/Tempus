@@ -23,7 +23,20 @@
 #include <boost/heap/d_ary_heap.hpp>
 #include <boost/heap/binomial_heap.hpp>
 
+#include "reverse_multimodal_graph.hh"
+
 namespace Tempus {
+
+template <class Object, class PotentialMap, class Heuristic>
+struct HeuristicCompare
+{
+    PotentialMap pmap_;
+    Heuristic h_;
+    HeuristicCompare( const PotentialMap& pmap, Heuristic h ) : pmap_(pmap), h_(h) {}
+    bool operator()( const Object& a, const Object& b ) const {
+        return (get( pmap_, a ) + h_(a.vertex)) > (get( pmap_, b ) + h_(b.vertex));
+    }
+};
 
     //
     // Implementation of the Dijkstra algorithm (label-setting) for a graph and an automaton
@@ -39,22 +52,25 @@ namespace Tempus {
     void combined_ls_algorithm_no_init(
                                        const NetworkGraph& graph,
                                        const Automaton& automaton,
-                                       Object source_object, 
+                                       Object source_object,
+                                       double start_time,
                                        PredecessorMap predecessor_map, 
                                        PotentialMap potential_map,
                                        CostCalculator cost_calculator, 
                                        TripMap trip_map, 
                                        WaitMap wait_map, 
                                        const std::vector<db_id_t>& request_allowed_modes,
-                                       Visitor vis) 
+                                       Visitor vis,
+                                       boost::function<double (const Multimodal::Vertex&)> heuristic) 
     {
-        typedef boost::indirect_cmp< PotentialMap, std::greater<double> > Cmp; 
-        Cmp cmp( potential_map ); 
-		
+        typedef HeuristicCompare<Object, PotentialMap, boost::function<double (const Multimodal::Vertex&)> > Cmp;
+        Cmp cmp( potential_map, heuristic );
+
         typedef boost::heap::d_ary_heap< Object, boost::heap::arity<4>, boost::heap::compare< Cmp >, boost::heap::mutable_<true> > VertexQueue;  
         VertexQueue vertex_queue( cmp ); 
         vertex_queue.push( source_object ); 
-		
+        vis.discover_vertex( source_object, graph );
+
         Object min_object; 
 
         while ( !vertex_queue.empty() ) {
@@ -97,14 +113,21 @@ namespace Tempus {
                     double cost = cost_calculator.transfer_time( graph, current_edge, min_object.mode, new_object.mode );
                     if ( cost < std::numeric_limits<double>::max() )
                     {
+                        double time = start_time;
+                        if ( is_graph_reversed<NetworkGraph>::value ) {
+                            time -= min_pi;
+                        }
+                        else {
+                            time += min_pi;
+                        }
                         // will update final_trip_id and wait_time
                         double travel_time = cost_calculator.travel_time( graph,
-                                                             current_edge,
-                                                             mode_id,
-                                                             min_pi,
-                                                             initial_trip_id,
-                                                             final_trip_id,
-                                                             wait_time );
+                                                                          current_edge,
+                                                                          mode_id,
+                                                                          time,
+                                                                          initial_trip_id,
+                                                                          final_trip_id,
+                                                                          wait_time );
                         cost += travel_time;
                         if ( ( cost < std::numeric_limits<double>::max() ) && ( s != min_object.state ) ) {
                             cost += penalty( automaton.automaton_graph_, s, mode->traffic_rules() ) ;
@@ -112,6 +135,8 @@ namespace Tempus {
                     }
 
                     if ( ( cost < std::numeric_limits<double>::max() ) && ( min_pi + cost < new_pi ) ) {
+                        vis.edge_relaxed( current_edge, mode_id, graph ); 
+
                         put( potential_map, new_object, min_pi + cost ); 
                         put( trip_map, new_object, final_trip_id ); 
 
@@ -119,10 +144,13 @@ namespace Tempus {
                         put( wait_map, min_object, wait_time ); 
 
                         vertex_queue.push( new_object ); 
-
-                        vis.edge_relaxed( current_edge, mode_id, graph ); 
+                        vis.discover_vertex( new_object, graph );
+                    }
+                    else {
+                        vis.edge_not_relaxed( current_edge, mode_id, graph );
                     }
                 }
+                vis.finish_vertex( min_object, graph );
             }
 
             vis.finish_vertex( min_object, graph ); 
