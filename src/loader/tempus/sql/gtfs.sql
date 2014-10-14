@@ -296,14 +296,14 @@ CREATE TABLE _tempus_import.transport_mode
 INSERT INTO _tempus_import.transport_mode(name, public_transport, gtfs_route_type)
 SELECT
 	case
-        when r.route_type = 0 then 'Tram (%(network))'
-        when r.route_type = 1 then 'Subway (%(network))'
-        when r.route_type = 2 then 'Train (%(network))'
-        when r.route_type = 3 then 'Bus (%(network))'
-        when r.route_type = 4 then 'Ferry (%(network))'
-        when r.route_type = 5 then 'Cable-car (%(network))'
-        when r.route_type = 6 then 'Suspended Cable-Car (%(network))'
-        when r.route_type = 7 then 'Funicular (%(network))'
+        when r.route_type = 0 then 'Tram'
+        when r.route_type = 1 then 'Subway'
+        when r.route_type = 2 then 'Train'
+        when r.route_type = 3 then 'Bus'
+        when r.route_type = 4 then 'Ferry'
+        when r.route_type = 5 then 'Cable-car'
+        when r.route_type = 6 then 'Suspended Cable-Car'
+        when r.route_type = 7 then 'Funicular'
         end, 
 	TRUE, 
 	r.route_type
@@ -313,7 +313,13 @@ FROM (SELECT DISTINCT route_type FROM _tempus_import.routes) r
 INSERT INTO tempus.transport_mode(name, public_transport, gtfs_route_type)
 SELECT 
 	name, public_transport, gtfs_route_type
-FROM _tempus_import.transport_mode; 
+FROM _tempus_import.transport_mode
+WHERE gtfs_route_type IN
+(
+SELECT gtfs_route_type FROM _tempus_import.transport_mode
+EXCEPT
+SELECT gtfs_route_type FROM tempus.transport_mode
+) ; 
 
 do $$
 begin
@@ -330,7 +336,7 @@ select * from
         , route_id as vendor_id
 	, route_short_name as short_name
 	, route_long_name as long_name
-	, transport_mode.id
+	, transport_mode.id as transport_mode
         -- use the agency_id if available, else set to the only one in agency.txt
         , (select id from _tempus_import.pt_agency_idmap where vendor_id = (case when agency_id is null then (select agency_id from _tempus_import.agency) else agency_id end) ) as agency_id
 from
@@ -635,11 +641,29 @@ end
 $$;
 
 CREATE OR REPLACE VIEW tempus.pt_stop_by_network AS
- SELECT DISTINCT pt_stop.id AS stop_id, pt_stop.vendor_id, pt_stop.name, pt_stop.location_type, pt_stop.parent_station, 
- pt_route.transport_mode, pt_stop.road_section_id, pt_stop.zone_id, pt_stop.abscissa_road_section, pt_stop.geom, pt_network.id AS network_id
-   FROM tempus.pt_stop, tempus.pt_section, tempus.pt_network, tempus.pt_route, tempus.pt_trip, tempus.pt_stop_time, tempus.pt_frequency
-  WHERE pt_network.id = pt_section.network_id AND (pt_section.stop_from = pt_stop.id OR pt_section.stop_to = pt_stop.id)
-  AND pt_route.id = pt_trip.route_id AND (pt_trip.id = pt_stop_time.trip_id AND pt_stop_time.stop_id = pt_stop.id);
+ SELECT DISTINCT ON (pt_stop.id, pt_route.transport_mode, pt_network.id)
+    int4(row_number() over()) as id,
+    pt_stop.id AS stop_id,
+    pt_stop.vendor_id,
+    pt_stop.name,
+    pt_stop.location_type,
+    pt_stop.parent_station,
+    pt_route.transport_mode,
+    pt_stop.road_section_id,
+    pt_stop.zone_id,
+    pt_stop.abscissa_road_section,
+    pt_stop.geom,
+    pt_network.id AS network_id
+   FROM tempus.pt_stop,
+    tempus.pt_section,
+    tempus.pt_network,
+    tempus.pt_route,
+    tempus.pt_trip,
+    tempus.pt_stop_time
+  WHERE pt_network.id = pt_section.network_id
+   AND (pt_section.stop_from = pt_stop.id OR pt_section.stop_to = pt_stop.id) AND pt_route.id = pt_trip.route_id
+   AND pt_trip.id = pt_stop_time.trip_id
+   AND pt_stop_time.stop_id = pt_stop.id;
 
 -- delete stops not involved in a section and not parent of another stop
 delete from tempus.pt_stop
