@@ -47,7 +47,7 @@ INSERT INTO tempus.transport_mode(name, public_transport, gtfs_route_type, traff
 INSERT INTO tempus.transport_mode(name, public_transport, gtfs_route_type, traffic_rules, speed_rule, toll_rule, engine_type, need_parking, shared_vehicle, return_shared_vehicle) 
 	VALUES ('Private car',     'f', NULL, 4,  5, 1,    1,    't', 'f', 'f'); 
 INSERT INTO tempus.transport_mode(name, public_transport, gtfs_route_type, traffic_rules, speed_rule, toll_rule, engine_type, need_parking, shared_vehicle, return_shared_vehicle) 
-	VALUES ('Taxi',            'f', NULL, 12, 5, 1,    1,    'f', 'f', 'f'); 
+        VALUES ('Taxi',            'f', NULL, 8, 5, 1,    1,    'f', 'f', 'f');
 
 CREATE TABLE tempus.road_validity_period
 (
@@ -168,6 +168,7 @@ CREATE TABLE tempus.road_section
 );
 COMMENT ON TABLE tempus.road_section IS 'Road sections description';
 -- TODO Add a CHECK on transport_type_* bitfields value
+COMMENT ON COLUMN tempus.road_section.road_type IS '1: fast links between urban areas, 2: links between 1 level links, heavy traffic with lower speeds, 3: local links with heavy traffic, 4: low traffic';
 COMMENT ON COLUMN tempus.road_section.traffic_rules_ft IS 'Bitfield value giving allowed traffic rules for direction from -> to'; 
 COMMENT ON COLUMN tempus.road_section.traffic_rules_tf IS 'Bitfield value giving allowed traffic rules for direction to -> from'; 
 COMMENT ON COLUMN tempus.road_section.length IS 'In meters'; 
@@ -507,13 +508,15 @@ language sql;
 
 DROP VIEW IF EXISTS tempus.forbidden_movements;
 CREATE OR REPLACE VIEW tempus.forbidden_movements AS
-SELECT
-	road_restriction.id,
-	road_restriction.sections,
-	st_union(road_section.geom) AS geom
-FROM tempus.road_section, tempus.road_restriction
-WHERE road_section.id = ANY (road_restriction.sections)
-GROUP BY road_restriction.id;
+ SELECT road_restriction.id,
+    road_restriction.sections,
+    st_union(road_section.geom) AS geom,
+    max(road_restriction_time_penalty.traffic_rules) AS traffic_rules
+   FROM tempus.road_section,
+    tempus.road_restriction,
+    tempus.road_restriction_time_penalty
+  WHERE (road_section.id = ANY (road_restriction.sections)) AND road_restriction_time_penalty.restriction_id = road_restriction.id AND road_restriction_time_penalty.time_value = 'Infinity'::double precision
+  GROUP BY road_restriction.id;
 
 DROP FUNCTION IF EXISTS tempus.array_search(anyelement, anyarray);
 
