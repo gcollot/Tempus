@@ -55,10 +55,12 @@ public:
         return odl;
     }
 
-    static const PluginParameters plugin_parameters() {
-        PluginParameters params;
-        params.supported_optimization_criteria.push_back( CostDistance );
-        params.supported_optimization_criteria.push_back( CostDuration );
+    static const PluginCapabilities plugin_capabilities() {
+        PluginCapabilities params;
+        params.optimization_criteria().push_back( CostDistance );
+        params.optimization_criteria().push_back( CostDuration );
+        params.set_depart_after( true );
+        params.set_arrive_before( false );
         return params;
     }
 
@@ -215,6 +217,8 @@ public:
         // we result in only one roadmap
         result_.push_back( Roadmap() );
         Roadmap& roadmap = result_.back();
+
+        roadmap.set_starting_date_time( request_.steps()[0].constraint().date_time() );
 
         bool first_loop = true;
 

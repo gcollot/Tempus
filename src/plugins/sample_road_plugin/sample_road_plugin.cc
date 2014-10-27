@@ -56,9 +56,9 @@ public:
         return odl;
     }
 
-    static const PluginParameters plugin_parameters() {
-        PluginParameters params;
-        params.supported_optimization_criteria.push_back( CostDistance );
+    static const PluginCapabilities plugin_capabilities() {
+        PluginCapabilities params;
+        params.optimization_criteria().push_back( CostDistance );
         return params;
     }
 
@@ -193,6 +193,9 @@ public:
 
         result_.push_back( Roadmap() );
         Roadmap& roadmap = result_.back();
+
+        roadmap.set_starting_date_time( request_.steps()[0].constraint().date_time() );
+
         std::auto_ptr<Roadmap::Step> step;
 
         Road::Edge current_road;

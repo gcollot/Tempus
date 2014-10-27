@@ -51,10 +51,13 @@ public:
         return OptionDescriptionList();
     }
 
-    static const PluginParameters plugin_parameters() {
-        PluginParameters params;
-        params.supported_optimization_criteria.push_back( CostDistance );
-        params.supported_optimization_criteria.push_back( CostDuration );
+    static const PluginCapabilities plugin_capabilities() {
+        PluginCapabilities params;
+        params.optimization_criteria().push_back( CostDistance );
+        params.optimization_criteria().push_back( CostDuration );
+        params.set_intermediate_steps( true );
+        params.set_depart_after( true );
+        params.set_arrive_before( false );
         return params;
     }
 
@@ -206,6 +209,8 @@ public:
     void add_roadmap( const Path& path ) {
         result_.push_back( Roadmap() );
         Roadmap& roadmap = result_.back();
+
+        roadmap.set_starting_date_time( request_.steps()[0].constraint().date_time() );
 
         std::list<Multimodal::Vertex>::const_iterator previous = path.begin();
         std::list<Multimodal::Vertex>::const_iterator it = ++previous;

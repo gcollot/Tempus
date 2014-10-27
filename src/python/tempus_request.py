@@ -122,11 +122,12 @@ class RoadStep:
         self.wkb = wkb
 
 class PublicTransportStep:
-    def __init__( self, network = '', departure = '', arrival = '', route = '', costs = {}, mode = 0, departure_time = 0.0, arrival_time = 0.0, wait_time = 0.0, wkb = '' ):
+    def __init__( self, network = '', departure = '', arrival = '', route = '', trip_id = 0, costs = {}, mode = 0, departure_time = 0.0, arrival_time = 0.0, wait_time = 0.0, wkb = '' ):
         self.network = network
         self.departure = departure
         self.arrival = arrival
         self.route = route
+        self.trip_id = trip_id
         self.departure_time = departure_time
         self.arrival_time = arrival_time
         self.wait_time = wait_time
@@ -197,10 +198,13 @@ class PluginOption:
 
 # options : option_name => PluginOption
 class Plugin:
-    def __init__( self, name = '', options = {}, supported_criteria = [] ):
+    def __init__( self, name = '', options = {}, supported_criteria = [], intermediate_steps = False, depart_after = False, arrive_before = False ):
         self.name = name
         self.options = options
         self.supported_criteria = supported_criteria
+        self.intermediate_steps = intermediate_steps
+        self.depart_after = depart_after
+        self.arrive_before = arrive_before
 
 class TransportMode:
     def __init__( self, id = 0, name = '', is_public_transport = False, need_parking = False, is_shared = False, must_be_returned = False, traffic_rules = 0, speed_rule = 0, toll_rules = 0, engine_type = 0 ):
@@ -287,6 +291,9 @@ def parse_plugins( output ):
         name = plugin.attrib['name']
         options = {}
         supported_criteria = []
+        intermediate_steps = False
+        depart_after = False
+        arrive_before = False
         for option in plugin:
             if option.tag == 'option':
                 optval = parse_option_value( option[0][0] )
@@ -295,7 +302,19 @@ def parse_plugins( output ):
                                                                default_value = optval )
             if option.tag == 'supported_criterion':
                 supported_criteria.append( int(option.text) )
-        plugins.append( Plugin( name = name, options = options, supported_criteria = supported_criteria ) )
+            if option.tag == 'intermediate_steps':
+                intermediate_steps = option.text == "true"
+            if option.tag == 'depart_after':
+                depart_after = option.text == "true"
+            if option.tag == 'arrive_before':
+                arrive_before = option.text == "true"
+        plugins.append( Plugin( name = name,
+                                options = options,
+                                supported_criteria = supported_criteria,
+                                intermediate_steps = intermediate_steps,
+                                depart_after = depart_after,
+                                arrive_before = arrive_before
+                            ) )
     return plugins
 
 def parse_transport_modes( output ):
@@ -349,6 +368,7 @@ def parse_results( results ):
                 departure = child.attrib['departure_stop']
                 arrival = child.attrib['arrival_stop']
                 route = child.attrib['route']
+                trip_id = int(child.attrib['trip_id'])
                 network = child.attrib['network']
                 transport_mode = int(child.attrib['transport_mode'])
                 departure_time = float(child.attrib['departure_time'])
@@ -361,6 +381,7 @@ def parse_results( results ):
                                                    departure = departure,
                                                    arrival = arrival,
                                                    route = route,
+                                                   trip_id = trip_id,
                                                    departure_time = departure_time,
                                                    arrival_time = arrival_time,
                                                    wait_time = wait_time,
@@ -505,6 +526,8 @@ class TempusRequest:
             elif isinstance(v, float):
                 tag_name = "float_value"
             elif isinstance(v, str):
+                tag_name = "string_value"
+            elif isinstance(v, unicode):
                 tag_name = "string_value"
             else:
                 raise RuntimeError( "Unknown value type " + value )
