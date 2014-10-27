@@ -252,7 +252,7 @@ COMMENT ON TABLE tempus.poi IS 'Points of Interest description';
 -- Sub Network organisation
 CREATE TABLE tempus.pt_network
 (
-	id serial PRIMARY KEY,
+        id serial PRIMARY KEY,
 	pnname varchar,
 	commercial_name varchar, 
 	import_date timestamp not null default current_timestamp,
@@ -287,8 +287,8 @@ COMMENT ON TABLE tempus.pt_zone
 -- GTFS Stops
 CREATE TABLE tempus.pt_stop
 (
-	id serial PRIMARY KEY,
-    vendor_id varchar, -- optional ID given by data provider
+	id integer PRIMARY KEY,
+        vendor_id varchar, -- optional ID given by data provider
 	name varchar NOT NULL,
 	location_type boolean, -- As in GTFS: false means stop, true means station
 	parent_station integer REFERENCES tempus.pt_stop ON DELETE CASCADE ON UPDATE CASCADE,
@@ -308,7 +308,7 @@ COMMENT ON COLUMN tempus.pt_stop.abscissa_road_section IS 'Curve length from sta
 -- Routes (and subgraph link)
 CREATE TABLE tempus.pt_route
 (
-	id serial PRIMARY KEY,
+        id serial PRIMARY KEY,
 	vendor_id varchar, 
 	agency_id integer NOT NULL REFERENCES tempus.pt_agency ON DELETE CASCADE ON UPDATE CASCADE,
 	short_name varchar,
@@ -366,7 +366,7 @@ COMMENT ON COLUMN tempus.pt_calendar_date.exception_type IS 'As in GTFS : 1 serv
 -- GTFS Trip
 CREATE TABLE tempus.pt_trip
 (
-	id serial PRIMARY KEY, 
+        id serial PRIMARY KEY,
 	vendor_id varchar,
 	route_id integer NOT NULL REFERENCES tempus.pt_route ON DELETE CASCADE ON UPDATE CASCADE,
 	service_id integer NOT NULL,

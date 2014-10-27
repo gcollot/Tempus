@@ -305,14 +305,14 @@ INSERT INTO _tempus_import.transport_mode(id, name, public_transport, gtfs_route
 SELECT
         nextval('_tempus_import.transport_mode_id') as id,
 	case
-        when r.route_type = 0 then 'Tram (%(network))'
-        when r.route_type = 1 then 'Subway (%(network))'
-        when r.route_type = 2 then 'Train (%(network))'
-        when r.route_type = 3 then 'Bus (%(network))'
-        when r.route_type = 4 then 'Ferry (%(network))'
-        when r.route_type = 5 then 'Cable-car (%(network))'
-        when r.route_type = 6 then 'Suspended Cable-Car (%(network))'
-        when r.route_type = 7 then 'Funicular (%(network))'
+        when r.route_type = 0 then 'Tram'
+        when r.route_type = 1 then 'Subway'
+        when r.route_type = 2 then 'Train'
+        when r.route_type = 3 then 'Bus'
+        when r.route_type = 4 then 'Ferry'
+        when r.route_type = 5 then 'Cable-car'
+        when r.route_type = 6 then 'Suspended Cable-Car'
+        when r.route_type = 7 then 'Funicular'
         end, 
 	TRUE, 
 	r.route_type
@@ -320,9 +320,9 @@ FROM (SELECT DISTINCT route_type FROM _tempus_import.routes) r
 ;
 
 INSERT INTO tempus.transport_mode(id, name, public_transport, gtfs_route_type)
-SELECT 
-	id, name, public_transport, gtfs_route_type
+SELECT id, name, public_transport, gtfs_route_type
 FROM _tempus_import.transport_mode; 
+
 
 do $$
 begin
@@ -339,7 +339,7 @@ select * from
         , route_id as vendor_id
 	, route_short_name as short_name
 	, route_long_name as long_name
-	, transport_mode.id
+	, transport_mode.id as transport_mode
         -- use the agency_id if available, else set to the only one in agency.txt
         , (select id from _tempus_import.pt_agency_idmap where vendor_id = (case when agency_id is null then (select agency_id from _tempus_import.agency) else agency_id end) ) as agency_id
 from
@@ -686,7 +686,6 @@ CREATE TABLE tempus.view_section_by_network AS
     tempus.pt_stop_time pt_stop_time_to,
     tempus.transport_mode
   WHERE pt_route.id = pt_trip.route_id AND pt_trip.id = pt_stop_time_from.trip_id AND pt_stop_time_from.trip_id = pt_stop_time_to.trip_id AND pt_stop_time_from.stop_sequence = (pt_stop_time_to.stop_sequence - 1) AND pt_stop_time_from.stop_id = pt_section.stop_from AND pt_stop_time_to.stop_id = pt_section.stop_to AND transport_mode.id = pt_route.transport_mode;
-
   END;
 $$ LANGUAGE plpgsql;
 
@@ -713,7 +712,6 @@ where
    s1.stop_from is null and
    s2.stop_to is null and
    stop2.parent_station is null
-)
-;
+);
 
 
