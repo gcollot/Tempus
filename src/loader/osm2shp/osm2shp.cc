@@ -48,6 +48,8 @@
 
 #include <map>
 #include <string>
+#include <vector>
+#include <iostream>
 
 #include <libxml/xmlstring.h>
 #include <libxml/xmlreader.h>
@@ -67,6 +69,17 @@ private:
     double coord[2];
 };
 
+struct RelationMember {
+    std::string role;
+    enum Type {
+        MEMBER_NODE,
+        MEMBER_WAY,
+        MEMBER_RELATION
+    };
+    Type type;
+    int ref;
+};
+
 std::map<int,Coord> node_storage;
 std::map<std::string,std::string> current_tags;
 int current_nodes[MAX_NODES_PER_WAY];
@@ -75,6 +88,8 @@ bool too_many_nodes_warning_issued = false;
 int current_id;
 char* current_timestamp;
 Coord current_latlon;
+std::vector<RelationMember> current_members;
+
 std::string outdir = ".";
 
 struct sf {
@@ -135,14 +150,17 @@ void shapefile_new( int slot, int filetype, const char* filename, int num_fields
     assert( slot < MAX_SHAPEFILES );
     shape = &( shapefiles[slot] );
     const std::string filepath = outdir+"/"+filename;
-    shape->shph = SHPCreate( filepath.c_str(), filetype );
-
-    if ( shape->shph==0 ) {
-        die( "cannot create shapefile '%s'", filepath.c_str() );
+    if ( filetype != SHPT_NULL ) {
+        shape->shph = SHPCreate( filepath.c_str(), filetype );
+        if ( shape->shph==0 ) {
+            die( "cannot create shapefile '%s'", filepath.c_str() );
+        }
+    }
+    else {
+        shape->shph = 0;
     }
 
     shape->dbfh = DBFCreate( filepath.c_str() );
-
     if ( shape->dbfh==0 ) {
         die( "cannot create dbf file '%s'", filepath.c_str() );
     }
@@ -219,6 +237,16 @@ void shapefile_add_dbf( int slot, int entity, bool, va_list ap )
             break;
         }
     }
+}
+
+void shapefile_add_attributes( int slot, ... )
+{
+    struct sf* shape = &( shapefiles[slot] );
+    va_list ap;
+    int nbRecord;
+    va_start( ap, slot );
+    nbRecord = DBFGetRecordCount( shape->dbfh );
+    shapefile_add_dbf( slot, nbRecord, false, ap );
 }
 
 void shapefile_add_node( int slot, ... )
@@ -329,83 +357,7 @@ int extract_integer_tag( const char* name, int def )
     return( atoi( found->second.c_str() ) );
 }
 
-void setup_shapefiles()
-{
-    // set up your shapefiles. for each of the files you want to create,
-    // make one call to shapefile_new, with the following parameters:
-    //
-    // shapefile_new(id, type, basename, num_attrs, ...)
-    //
-    // where:
-    //
-    // id -        the number of the file. start with 0 and count upwards.
-    // type -      put SHPT_POINT for point files, SHPT_ARC for line files,
-    //             and SHPT_POLYGON for areas.
-    // basename -  the file name; extensions .dbf/.shp/.shx will be added.
-    // num_attrs - how many attributes you want in the dbf file.
-    //
-    // for each attribute you will then have to specify the following:
-    //
-    // a name -    for the name of the column in the .dbf file;
-    // a type -    put FTString for strings, FTInteger for integers, and
-    //             FTDouble for doubles;
-    // a length -  how many characters or digits the value  may have, and
-    // decimals -  only for FTDouble, the number of decimals.
-
-    shapefile_new( 0, SHPT_ARC, "highway", 5,
-                   "osm_id", FTInteger, 11,
-                   "name", FTString, 48,
-                   "type", FTString, 16,
-                   "oneway", FTString, 6,
-                   "lanes", FTInteger, 1 );
-}
-
-/**
- * Called when a node has been fully read.
- */
-void process_osm_node()
-{
-}
-
-/**
- * Called when a way has been fully read.
- * You will find its ID in current_id and its tags in the g_hash_table
- * current_tags.
- */
-void process_osm_way()
-{
-    // this is executed whenever a way is fully read.
-    //
-    // You will find its ID in current_id and its tags in the g_hash_table
-    // current_tags.
-    //
-    // Determine whether you want the way added to one of your shapefiles,
-    // and if yes, call
-    //
-    // shapefile_add_way(id, ...)
-    //
-    // where "id" is the number of the file you have used during setup,
-    // and "..." is the list of attributes, which must match number and
-    // type as specified during setup.
-
-    std::map<std::string,std::string>::const_iterator
-    found = current_tags.find( "highway" );
-
-    if ( found != current_tags.end() ) {
-        std::map<std::string,std::string>::const_iterator
-        oneway = current_tags.find( "oneway" );
-        std::map<std::string,std::string>::const_iterator
-        lanes = current_tags.find( "lanes" );
-
-        shapefile_add_way( 0,
-                           current_id,
-                           current_tags["name"].c_str(),
-                           found->second.c_str(),
-                           oneway != current_tags.end() ? oneway->second.c_str() : "",
-                           lanes != current_tags.end() ? atoi( lanes->second.c_str() ) : 0 );
-        return;
-    }
-}
+#include "tempus.config"
 
 void save_osm_node()
 {
@@ -433,15 +385,11 @@ void open_element( xmlTextReaderPtr reader, const xmlChar* name )
         xmlFree( xlat );
     }
     else if ( xmlStrEqual( name, ( const xmlChar* )"tag" ) ) {
-        char* k;
-        char* v;
         xk = xmlTextReaderGetAttribute( reader, ( const xmlChar* )"k" );
         assert( xk );
         xv = xmlTextReaderGetAttribute( reader, ( const xmlChar* )"v" );
         assert( xv );
-        k  = ( char* )xmlStrdup( xk );
-        v  = ( char* )xmlStrdup( xv );
-        current_tags.insert( std::make_pair( k, v ) );
+        current_tags.insert( std::make_pair( (const char*)xk, (const char*)xv ) );
         xmlFree( xv );
         xmlFree( xk );
     }
@@ -452,6 +400,36 @@ void open_element( xmlTextReaderPtr reader, const xmlChar* name )
         current_id = strtol( ( char* )xid, NULL, 10 );
         current_timestamp = ( char* ) xts;
         xmlFree( xid );
+    }
+    else if ( xmlStrEqual( name, ( const xmlChar* )"relation" ) ) {
+        xid  = xmlTextReaderGetAttribute( reader, ( const xmlChar* )"id" );
+        assert( xid );
+        current_id = strtol( ( char* )xid, NULL, 10 );
+        xmlFree( xid );
+    }
+    else if ( xmlStrEqual( name, ( const xmlChar* )"member" ) ) {
+        xmlChar *xtype, *xref, *xrole;
+        xtype  = xmlTextReaderGetAttribute( reader, ( const xmlChar* )"type" );
+        xref  = xmlTextReaderGetAttribute( reader, ( const xmlChar* )"ref" );
+        xrole  = xmlTextReaderGetAttribute( reader, ( const xmlChar* )"role" );
+
+        RelationMember m;
+        m.role = (const char*)xrole;
+        std::string typestr = (const char*)xtype;
+        if ( typestr == "node" ) {
+            m.type = RelationMember::MEMBER_NODE;
+        }
+        else if ( typestr == "way" ) {
+            m.type = RelationMember::MEMBER_WAY;
+        }
+        else if ( typestr == "relation" ) {
+            m.type = RelationMember::MEMBER_RELATION;
+        }
+        m.ref = strtol( ( char* )xref, NULL, 10 );
+        current_members.push_back( m );
+        xmlFree( xtype );
+        xmlFree( xref );
+        xmlFree( xrole );
     }
     else if ( xmlStrEqual( name, ( const xmlChar* )"nd" ) ) {
         xid  = xmlTextReaderGetAttribute( reader, ( const xmlChar* )"ref" );
@@ -494,6 +472,11 @@ void close_element( const xmlChar* name )
             xmlFree( current_timestamp );
             current_timestamp = NULL;
         }
+    }
+    else if ( xmlStrEqual( name, ( const xmlChar* )"relation" ) ) {
+        process_osm_relation();
+        current_tags.clear();
+        current_members.clear();
     }
 }
 
@@ -615,6 +598,8 @@ int main( int argc, char* argv[] )
     for ( i=0; i<MAX_SHAPEFILES; i++ ) {
         if ( shapefiles[i].shph ) {
             SHPClose( shapefiles[i].shph );
+        }
+        if ( shapefiles[i].dbfh ) {
             DBFClose( shapefiles[i].dbfh );
         }
     }

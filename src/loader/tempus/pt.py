@@ -39,6 +39,7 @@ class GTFSImporter(DataImporter):
             ('fare_attributes', False),
             ('fare_rules', False),
             ('frequencies', False),
+            ('transfers', False),
             ('routes', True),
             ('shapes', False),
             ('stop_times', True),
@@ -71,16 +72,14 @@ class GTFSImporter(DataImporter):
 
     def check_input(self):
         """Check if given source is a GTFS zip file."""
-        res = False
         if zipfile.is_zipfile(self.source):
-            res = True
             with zipfile.ZipFile(self.source) as zipf:
                 filelist = [ os.path.basename(x) for x in zipf.namelist() ]
                 for f, mandatory in GTFSImporter.GTFSFILES:
-                    if res and "%s.txt" % f not in filelist:
-                        if mandatory:
-                            res = False
-        return res
+                    if mandatory and "%s.txt" % f not in filelist:
+                        raise StandardError("Missing mandatory file: %s.txt" % f)
+        else:
+            raise StandardError("Not a zip file!")
 
     def load_data(self):
         """Generate SQL file and load GTFS data to database."""

@@ -244,6 +244,7 @@ SET traffic_rules_ft = traffic_rules_ft
 FROM _tempus_import.cdms as cdms
 WHERE cdms.cond_type = 5 AND cdms.link_id = road_section.id; 
 
+<<<<<<< HEAD
 -- TABLE tempus.poi : insert car parks
 INSERT INTO tempus.poi(id, poi_type, name, parking_transport_modes, road_section_id, abscissa_road_section, geom)
 SELECT poi_id as id,
@@ -257,7 +258,7 @@ FROM _tempus_import.parking, tempus.road_section
 WHERE road_section.id = parking.link_id;
 
 
--- Deleting road sections with no traffic rules allowed
+-- Delete road sections without traffic rules
 DELETE FROM tempus.road_section
 WHERE traffic_rules_ft=0 AND traffic_rules_tf=0;
 
