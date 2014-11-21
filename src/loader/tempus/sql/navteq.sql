@@ -244,7 +244,6 @@ SET traffic_rules_ft = traffic_rules_ft
 FROM _tempus_import.cdms as cdms
 WHERE cdms.cond_type = 5 AND cdms.link_id = road_section.id; 
 
-<<<<<<< HEAD
 -- TABLE tempus.poi : insert car parks
 INSERT INTO tempus.poi(id, poi_type, name, parking_transport_modes, road_section_id, abscissa_road_section, geom)
 SELECT poi_id as id,
