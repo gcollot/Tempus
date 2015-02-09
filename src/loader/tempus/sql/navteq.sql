@@ -257,7 +257,11 @@ FROM _tempus_import.parking, tempus.road_section
 WHERE road_section.id = parking.link_id;
 
 
+<<<<<<< HEAD
 -- Delete road sections without traffic rules
+=======
+-- Deleting road sections with no traffic rules allowed
+>>>>>>> master
 DELETE FROM tempus.road_section
 WHERE traffic_rules_ft=0 AND traffic_rules_tf=0;
 

@@ -86,21 +86,13 @@ NEW_API = 'commitChanges' in dir(QgsVectorLayer)
 # clears a FormLayout
 def clearLayout( lay ):
     # clean the widget list
-    rc = lay.rowCount()
-    if rc > 0:
-        for row in range(0, rc):
-            l1 = lay.itemAt( rc-row-1, QFormLayout.LabelRole )
-            l2 = lay.itemAt( rc-row-1, QFormLayout.FieldRole )
-            if l1 is not None:
-                lay.removeItem( l1 )
-                w1 = l1.widget()
-                lay.removeWidget( w1 )
-                w1.close()
-            if l2 is not None:
-                lay.removeItem( l2 )
-                w2 = l2.widget()
-                lay.removeWidget( w2 )
-                w2.close()
+    for r in range(lay.count()):
+        l = lay.takeAt(0)
+        if l is not None:
+            w = l.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
 
 #
 # clears a BoxLayout
@@ -578,11 +570,11 @@ class IfsttarRouting:
 
     def onTabChanged( self, tab ):
         # Plugin tab
-        if tab == 1:
-            self.update_plugin_options( 0 )
+        #if tab == 1:
+        #    self.update_plugin_options( 0 )
 
         # 'Query' tab
-        elif tab == 2:
+        if tab == 2:
                 # prepare for a new query
 #            self.dlg.reset()
             self.dlg.inQuery()
@@ -744,6 +736,11 @@ class IfsttarRouting:
                 vt = QVariant.Bool
             vl.addAttribute( QgsField( n, vt ) )
 
+        features = []
+        ntrace = len(trace)
+        i = 0
+        progressDlg = QProgressDialog("Loading traces ...", "Cancel", 0, ntrace)
+        progressDlg.setWindowModality(Qt.WindowModal)
         for ve in trace:
             fet = QgsFeature()
             if ve.wkb != '':
@@ -772,7 +769,14 @@ class IfsttarRouting:
             attrs = [ type, ve.origin.id, ve.destination.id ]
             attrs += [ve.variants.get(k) for k in ve.variants.keys()]
             fet.setAttributes( attrs )
-            pr.addFeatures( [fet] )
+
+            features.append( fet )
+            progressDlg.setValue(i)
+            if progressDlg.wasCanceled():
+                break
+            i = i + 1
+
+        pr.addFeatures( features )
 
         vl.commitChanges()
         vl.updateExtents()
@@ -967,48 +971,80 @@ class IfsttarRouting:
     # and fill the 'plugin' tab
     #
     def displayPlugins( self, plugins ):
+        self.dlg.ui.pluginCombo.blockSignals( True )
         self.dlg.ui.pluginCombo.clear()
         self.options_desc = {}
         for name, plugin in plugins.iteritems():
             self.dlg.ui.pluginCombo.insertItem(0, name )
+        self.dlg.ui.pluginCombo.blockSignals( False )
+        self.update_plugin_options(0)
 
     #
     # Take XML tree of 'options' and a dict 'option_values'
     # and fill the options part of the 'plugin' tab
     #
     def displayPluginOptions( self, plugin_name ):
-        lay = self.dlg.ui.optionsLayout
-        clearLayout( lay )
+        vlay = self.dlg.ui.optionsLayout
+        clearLayout( vlay )
 
-        row = 0
+        # sort options by category
+        options_by_cat = {}
         for name, option in self.plugins[plugin_name].options.iteritems():
-            lbl = QLabel( self.dlg )
-            lbl.setText( option.description )
-            lay.setWidget( row, QFormLayout.LabelRole, lbl )
-            
-            t = option.type()
-            
-            val = self.plugin_options[plugin_name][name]
-            if t == Tempus.OptionType.Bool:
-                widget = QCheckBox( self.dlg )
-                if val == True:
-                    widget.setCheckState( Qt.Checked )
-                else:
-                    widget.setCheckState( Qt.Unchecked )
-                QObject.connect(widget, SIGNAL("toggled(bool)"), lambda checked, name=name, t=t, pname=plugin_name: self.onOptionChanged( pname, name, t, checked ) )
+            s = name.split("/")
+            if len(s)>1:
+                cat_name = s[0]
+                option_name = s[1]
             else:
-                widget = QLineEdit( self.dlg )
-                if t == Tempus.OptionType.Int:
-                    valid = QIntValidator( widget )
-                    widget.setValidator( valid )
-                if t == Tempus.OptionType.Float:
-                    valid = QDoubleValidator( widget )
-                    widget.setValidator( valid )
-                widget.setText( str(val) )
-                QObject.connect(widget, SIGNAL("textChanged(const QString&)"), lambda text, name=name, t=t, pname=plugin_name: self.onOptionChanged( pname, name, t, text ) )
-            lay.setWidget( row, QFormLayout.FieldRole, widget )
-            
-            row += 1
+                cat_name = ""
+                option_name = name
+            if options_by_cat.get( cat_name ) is None:
+                options_by_cat[cat_name] = []
+            options_by_cat[cat_name].append( (option_name, option) )
+
+        for cat_name, options in options_by_cat.iteritems():
+
+            if cat_name != "":
+                q = QGroupBox( cat_name )
+            else:
+                q = QWidget()
+
+            lay = QFormLayout( q )
+            vlay.addWidget( q )
+
+            row = 0
+            for name, option in options:
+                if cat_name != "":
+                    complete_name = cat_name + "/" + name
+                else:
+                    complete_name = name
+
+                lbl = QLabel()
+                lbl.setText( option.description )
+                lay.setWidget( row, QFormLayout.LabelRole, lbl )
+
+                t = option.type()
+
+                val = self.plugin_options[plugin_name][complete_name]
+                if t == Tempus.OptionType.Bool:
+                    widget = QCheckBox()
+                    if val == True:
+                        widget.setCheckState( Qt.Checked )
+                    else:
+                        widget.setCheckState( Qt.Unchecked )
+                    QObject.connect(widget, SIGNAL("toggled(bool)"), lambda checked, name=complete_name, t=t, pname=plugin_name: self.onOptionChanged( pname, name, t, checked ) )
+                else:
+                    widget = QLineEdit( self.dlg )
+                    if t == Tempus.OptionType.Int:
+                        valid = QIntValidator( widget )
+                        widget.setValidator( valid )
+                    if t == Tempus.OptionType.Float:
+                        valid = QDoubleValidator( widget )
+                        widget.setValidator( valid )
+                    widget.setText( str(val) )
+                    QObject.connect(widget, SIGNAL("textChanged(const QString&)"), lambda text, name=complete_name, t=t, pname=plugin_name: self.onOptionChanged( pname, name, t, text ) )
+                lay.setWidget( row, QFormLayout.FieldRole, widget )
+
+                row += 1
 
         self.dlg.set_supported_criteria( self.plugins[plugin_name].supported_criteria )
         self.dlg.set_intermediate_steps_support( self.plugins[plugin_name].intermediate_steps )
@@ -1119,14 +1155,12 @@ class IfsttarRouting:
         [ox, oy] = coords[0]
         criteria = self.dlg.get_selected_criteria()
         constraints = self.dlg.get_constraints()
-        has_constraint = False
+        has_constraint = sum([ x for x,_ in constraints ]) > 0
         for i in range(len(constraints)-1):
             ci, ti = constraints[i]
             cj, tj = constraints[i+1]
             dti = datetime.strptime(ti, "%Y-%m-%dT%H:%M:%S")
             dtj = datetime.strptime(tj, "%Y-%m-%dT%H:%M:%S")
-            if ci != 0 or cj != 0:
-                has_constraint = True
             if ci == 2 and cj == 1 and dtj < dti:
                 QMessageBox.warning( self.dlg, "Warning", "Impossible constraint : " + tj + " < " + ti )
                 return
@@ -1153,9 +1187,9 @@ class IfsttarRouting:
         currentPlugin = str(self.dlg.ui.pluginCombo.currentText())
 
         steps = []
-        for i in range(1, len(constraints)):
-            steps.append( Tempus.RequestStep( private_vehicule_at_destination = pvads[i-1],
-                                destination = Tempus.Point( coords[i][0], coords[i][1] ),
+        for i in range(0, len(constraints)):
+            steps.append( Tempus.RequestStep( private_vehicule_at_destination = pvads[i],
+                                              destination = Tempus.Point( coords[i+1][0], coords[i+1][1] ),
                                 constraint = Tempus.Constraint( type = constraints[i][0], date_time = constraints[i][1] )
                                 )
                           )
@@ -1164,8 +1198,6 @@ class IfsttarRouting:
             select_xml = self.wps.request( plugin_name = currentPlugin,
                                            plugin_options = self.plugin_options[currentPlugin],
                                            origin = Tempus.Point(ox, oy),
-                                           departure_constraint = Tempus.Constraint( type = constraints[0][0],
-                                                                                     date_time = constraints[0][1] ),
                                            allowed_transport_modes = transports,
                                            parking_location = None if parking == [] else Tempus.Point(parking[0], parking[1]),
                                            criteria = criteria,

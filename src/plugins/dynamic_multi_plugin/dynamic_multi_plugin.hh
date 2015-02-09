@@ -49,7 +49,7 @@ typedef std::list<Triple> Path;
 
 typedef std::map< Triple, double > PotentialMap; 
 typedef std::map< Triple, db_id_t > TripMap; 
-typedef std::map< Triple, Triple > PredecessorMap; 
+typedef std::map< Triple, Triple > PredecessorMap;
 
 // variables to retain between two requests
 struct StaticVariables
@@ -60,6 +60,8 @@ struct StaticVariables
     FrequencyMap frequency; // Frequency data for the current request
     TimetableMap rtimetable; // Reverse time table
     FrequencyMap rfrequency; // Reverse frequency data for the current request
+
+    RoadEdgeSpeedProfile speed_profile; // daily speed profile
 
     StaticVariables() : current_day( boost::gregorian::from_string("2013/11/12") )
     {}
@@ -82,10 +84,12 @@ protected:
     double timetable_frequency_; // travel time calculation mode
     bool verbose_algo_; // verbose vertex and edge traversal 
     bool verbose_; // Verbose processing (except algorithm)
+    bool enable_trace_;
     double min_transfer_time_; // Minimum time necessary for a transfer to be done (in minutes) 
     double walking_speed_; // Average walking speed
     double cycling_speed_; // Average cycling speed 
     double car_parking_search_time_; // Parking search time for cars
+    bool use_speed_profiles_;
     
     // Plugin metrics
     int iterations_; // Number of iterations
@@ -104,7 +108,7 @@ protected:
     Road::Vertex parking_location_;
 
     static StaticVariables s_;
-	
+
 public: 
     static void post_build();
     virtual void pre_process( Request& request );

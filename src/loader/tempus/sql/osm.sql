@@ -99,14 +99,19 @@ select
 	, case
 		when hw."type" in ('motorway', 'motorway_Link', 'trunk', 'trunk_Link', 'primary', 'primary_Link') then 4+8+16+32 -- car + taxi + carpool + truck
                 when hw."type" = 'cycleway' then 2 -- bicycle only
+                when hw."type" = 'footway' then 1 -- pedestrian only
 		else 32+16+8+4+2+1
 	end as traffic_rules_ft
 	, case
-		when oneway::text in ('true', 'yes', '1') then 0 -- one way
+		when oneway::text in ('true', 'yes', '1') then
+                  case when hw."type" in ('motorway', 'motorway_Link', 'trunk', 'trunk_Link', 'primary', 'primary_Link', 'cycleway') then 0 -- nothing here
+                       else 1 -- only pedestrian is allowed
+                  end
 		else
                   case
                         when hw."type" in ('motorway', 'motorway_Link', 'trunk', 'trunk_Link', 'primary', 'primary_Link') then 4+8+16+32 -- car + taxi + carpool + truck
                         when hw."type" = 'cycleway' then 2 -- bicycle only
+                        when hw."type" = 'footway' then 1 -- pedestrian only
 		        else 32+16+8+4+2+1
                   end
 	end as traffic_rules_tf
@@ -126,6 +131,7 @@ select
 		when hw."type" = 'service' then 50
 		when hw."type" = 'track' then 50
 		when hw."type" = 'unclassified' then 50
+		when hw."type" = 'footway' then 0
 		else 50
 	end as car_speed_limit	
 	, hw."name" as road_name
@@ -146,8 +152,6 @@ join
 	tempus.road_node as nt
 on
 	st_intersects(st_transform(st_endpoint(hw.geom), 2154), nt.geom)
-where
-	hw."type" not in ('footway')
 ;
 
 -- Restore constraints and index

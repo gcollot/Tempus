@@ -53,7 +53,7 @@ endif()
 set(CPACK_PACKAGE_NAME "tempus")
 set(CPACK_PACKAGE_VENDOR "IFSTTAR")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Tempus - manipulate transport graphs")
-set(CPACK_PACKAGE_VERSION "1.1-rc6")
+set(CPACK_PACKAGE_VERSION "1.2.0")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "tempus-${CPACK_PACKAGE_VERSION}")
 set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE)
 set(CPACK_COMPONENT_LIBRARIES_DISPLAY_NAME "Libraries")
@@ -175,6 +175,12 @@ endif()
 install(DIRECTORY data DESTINATION ${TEMPUS_INSTALL_DATA_DIRECTORY})
 
 add_subdirectory(src)
+
+set( BUILD_TESTS ON CACHE BOOL "Build unit tests ?" )
+
+if (BUILD_TESTS)
+  add_subdirectory( tests )
+endif()
 
 set( BUILD_DOC ON CACHE BOOL "Build documentation ?" )
 

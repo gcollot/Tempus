@@ -84,7 +84,7 @@ public:
         Db::Result res = db.exec( "SELECT stop_from, stop_to, ST_Length(geom) FROM tempus.pt_section" );
 
         for ( size_t i = 0; i < res.size(); ++i ) {
-            db_id_t stop_from, stop_to;
+            db_id_t stop_from = 0, stop_to = 0;
             double length = 0.0;
             res[i][0] >> stop_from;
             res[i][1] >> stop_to;
@@ -211,7 +211,7 @@ public:
         result_.push_back( Roadmap() );
         Roadmap& roadmap = result_.back();
 
-        roadmap.set_starting_date_time( request_.steps()[0].constraint().date_time() );
+        roadmap.set_starting_date_time( request_.steps()[1].constraint().date_time() );
 
         std::list<Multimodal::Vertex>::const_iterator previous = path.begin();
         std::list<Multimodal::Vertex>::const_iterator it = ++previous;

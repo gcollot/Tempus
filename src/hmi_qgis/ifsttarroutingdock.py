@@ -113,8 +113,6 @@ class IfsttarRoutingDock(QDockWidget):
         for child in pson[1:]:
             if child[0] == 'origin':
                 origin = child
-            elif child[0] == 'departure_constraint':
-                dep = child
             elif child[0] == 'parking_location':
                 parking = child
             elif child[0] == 'optimizing_criterion':
@@ -138,7 +136,7 @@ class IfsttarRoutingDock(QDockWidget):
         self.set_steps( len(steps) )
 
         coords = [ readCoords(origin) ]
-        constraints = [ [int(dep[1]['type']), dep[1]['date_time'] ] ]
+        constraints = []
         pvads = []
         for step in steps:
             for p in step[2:]:
@@ -257,7 +255,6 @@ class IfsttarRoutingDock(QDockWidget):
             self.ui.criterionBox.itemAt(i).widget().set_supported_criteria( criteria )
 
     def set_intermediate_steps_support( self, enabled ):
-        print "intermediate_steps_support", enabled
         n = self.nsteps()
         for i in range(0, n):
             w = self.ui.stepBox.itemAt(i).widget()
@@ -299,7 +296,7 @@ class IfsttarRoutingDock(QDockWidget):
             n += 1
 
     def get_constraints( self ):
-        c = [ [self.ui.origin.get_constraint_type(), self.ui.origin.get_constraint()] ]
+        c = []
         n = self.nsteps()
         for i in range(0, n):
             t = self.ui.stepBox.itemAt( i ).widget().get_constraint_type()
@@ -308,8 +305,6 @@ class IfsttarRoutingDock(QDockWidget):
         return c
 
     def set_constraints( self, constraints ):
-        self.ui.origin.set_constraint_type( constraints[0][0] )
-        self.ui.origin.set_constraint( constraints[0][1] )
         i = 0
         for constraint in constraints[1:]:
             self.ui.stepBox.itemAt( i ).widget().set_constraint_type( constraint[0] )

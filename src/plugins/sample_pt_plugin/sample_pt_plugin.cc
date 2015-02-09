@@ -93,7 +93,7 @@ public:
         const PublicTransport::Graph& pt_graph = *graph_.public_transports().begin()->second;
         db_id_t network_id = graph_.public_transports().begin()->first;
 
-        PublicTransport::Vertex departure, arrival;
+        PublicTransport::Vertex departure = 0, arrival = 0;
 
         // if stops are given by the corresponding options, get them
         int departure_id, arrival_id;
@@ -218,7 +218,7 @@ public:
         result_.push_back( Roadmap() );
         Roadmap& roadmap = result_.back();
 
-        roadmap.set_starting_date_time( request_.steps()[0].constraint().date_time() );
+        roadmap.set_starting_date_time( request_.steps()[1].constraint().date_time() );
 
         bool first_loop = true;
 
