@@ -254,6 +254,7 @@ select
 		-- only consider road sections within xx meters
 		-- stops further than this distance will not be included
 		st_dwithin(stops_geom.geom, rs.geom, 500)
+    WHERE (rs.traffic_rules_ft & 1 > 0 OR rs.traffic_rules_tf & 1 > 0)
 	window
 		-- select the nearest road geometry for each stop
 		nearest as (partition by stops.stop_id order by st_distance(stops_geom.geom, rs.geom))
