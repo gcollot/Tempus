@@ -11,7 +11,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
@@ -195,53 +195,62 @@ const DynamicMultiPlugin::PluginCapabilities DynamicMultiPlugin::plugin_capabili
 void DynamicMultiPlugin::post_build()
 {
     const Road::Graph& road_graph = Application::instance()->graph()->road();
-		
-    PQImporter psql( Application::instance()->db_options() ); 
+
+    // Importing turn restrictions
+    PQImporter psql( Application::instance()->db_options() );
     Road::Restrictions restrictions = psql.import_turn_restrictions( road_graph, Application::instance()->schema_name() );
     std::cout << "Turn restrictions imported" << std::endl;
-		
+
+    // Building automaton from turn restrictions
     s_.automaton.build_graph( restrictions ) ;
-    std::cout << "Automaton built" << std::endl; 
-		
-    std::ofstream ofs("all_movements_edge_automaton.dot"); // output to graphviz
-    Automaton<Road::Edge>::NodeWriter nodeWriter( s_.automaton.automaton_graph_ );
-    Automaton<Road::Edge>::ArcWriter arcWriter( s_.automaton.automaton_graph_, road_graph );
-    //    boost::write_graphviz( ofs, s_.automaton.automaton_graph_, nodeWriter, arcWriter);
-    std::cout << "Automaton exported to graphviz" << std::endl; 
+    std::cout << "Automaton built" << std::endl;
+
+    // Export automaton graph to GraphViz
+    if ( 0 ) // canceled, only for debug purposes
+    {
+        std::cout<< "Exporting automaton to a graphviz file: data/all_movements_edge_automaton.dot" << std::endl;
+        std::ofstream ofs("../../data/all_movements_edge_automaton.dot"); // output to graphviz
+        Automaton<Road::Edge>::NodeWriter nodeWriter( s_.automaton.automaton_graph_ );
+        Automaton<Road::Edge>::ArcWriter arcWriter( s_.automaton.automaton_graph_, road_graph );
+        boost::write_graphviz( ofs, s_.automaton.automaton_graph_, nodeWriter, arcWriter);
+        std::cout << "Automaton exported" << std::endl;
+    }
 }
-    
+
 void DynamicMultiPlugin::pre_process( Request& request )
 {
     // Initialize metrics
-    time_=0; 
-    time_algo_=0; 
-    iterations_=0; 
-    	
+    time_=0;
+    time_algo_=0;
+    iterations_=0;
+
     // Initialize timer for preprocessing time
-    Timer timer; 
-    	
+    Timer timer;
+
+    // Get plugin options
+    get_option( "Debug/verbose", verbose_ );
+    get_option( "Debug/verbose_algo", verbose_algo_ );
+    get_option( "Debug/enable_trace", enable_trace_ );
+    get_option( "Features/timetable_frequency", timetable_frequency_ );
+    get_option( "Time/min_transfer_time", min_transfer_time_ );
+    get_option( "Time/walking_speed", walking_speed_ );
+    get_option( "Time/cycling_speed", cycling_speed_ );
+    get_option( "Time/car_parking_search_time", car_parking_search_time_ );
+    get_option( "Time/use_speed_profiles", use_speed_profiles_ );
+
+
     // Check request and clear result
     REQUIRE( request.allowed_modes().size() >= 1 );
     REQUIRE( vertex_exists( request.origin(), graph_.road() ) );
     REQUIRE( vertex_exists( request.destination(), graph_.road() ) );
-    request_ = request; 
+    request_ = request;
 
-    if ( request.optimizing_criteria()[0] != CostDuration ) 
-        throw std::invalid_argument( "Unsupported optimizing criterion" ); 
-        
+    if ( request.optimizing_criteria()[0] != CostDuration )
+        throw std::invalid_argument( "Unsupported optimizing criterion" );
+
     if ( verbose_ ) cout << "Road origin node ID = " << graph_.road()[request_.origin()].db_id() << ", road destination node ID = " << graph_.road()[request_.destination()].db_id() << endl;
-    result_.clear(); 
-            	
-    // Get plugin options 		
-    get_option( "Debug/verbose", verbose_ ); 
-    get_option( "Debug/verbose_algo", verbose_algo_ ); 
-    get_option( "Debug/enable_trace", enable_trace_ );
-    get_option( "Features/timetable_frequency", timetable_frequency_ ); 
-    get_option( "Time/min_transfer_time", min_transfer_time_ ); 
-    get_option( "Time/walking_speed", walking_speed_ ); 
-    get_option( "Time/cycling_speed", cycling_speed_ ); 
-    get_option( "Time/car_parking_search_time", car_parking_search_time_ );
-    get_option( "Time/use_speed_profiles", use_speed_profiles_ );
+    result_.clear();
+
 
     // look for public transports in allowed modes
     bool pt_allowed = false;
@@ -270,166 +279,171 @@ void DynamicMultiPlugin::pre_process( Request& request )
     if ( use_speed_profiles_ && (request_.steps()[1].constraint().type() != Request::TimeConstraint::ConstraintAfter) ) {
         throw std::runtime_error( "A 'depart after' constraint must be specified for speed profiles" );
     }
-        
+
     // If current date changed, reload timetable / frequency
     if (
         ( (request_.steps()[1].constraint().type() == Request::TimeConstraint::ConstraintAfter) ||
-          (request_.steps()[1].constraint().type() == Request::TimeConstraint::ConstraintBefore) ) && 
+          (request_.steps()[1].constraint().type() == Request::TimeConstraint::ConstraintBefore) ) &&
         (s_.current_day != request_.steps()[1].constraint().date_time().date())
         ) {
         if ( pt_allowed && (graph_.public_transports().size() > 0) ) {
-            const PublicTransport::Graph& pt_graph = *graph_.public_transports().begin()->second;
-            std::cout << "Load timetable" << std::endl;
             s_.current_day = request_.steps()[1].constraint().date_time().date();
 
-            // cache graph id to descriptor
-            // FIXME - integrate the cache into the graphs ?
-            std::map<db_id_t, PublicTransport::Vertex> vertex_from_id_;
-            PublicTransport::Graph::vertex_iterator vit, vend;
-            for ( boost::tie( vit, vend ) = vertices( pt_graph ); vit != vend; ++vit ) {
-                vertex_from_id_[ pt_graph[*vit].db_id() ] = *vit;
-            }
+            for ( Multimodal::Graph::PublicTransportGraphList::const_iterator pt_graph_it = graph_.public_transports().begin();
+                  pt_graph_it != graph_.public_transports().end();
+                  pt_graph_it++ ) {
+                const PublicTransport::Graph& pt_graph = *pt_graph_it->second;
+                std::cout << "Load timetable for PT graph #" << pt_graph_it->first << std::endl;
 
-            if (timetable_frequency_ == 0) // timetable model 
-            {
-                // Charging necessary timetable data for request processing
-                Db::Result res = db_.exec( ( boost::format( "SELECT t1.stop_id as origin_stop, t2.stop_id as destination_stop, "
-                                                            "t1.trip_id, pt_route.transport_mode, extract(epoch from t1.arrival_time)/60 as departure_time, extract(epoch from t2.departure_time)/60 as arrival_time "
-                                                            "FROM tempus.pt_stop_time t1, tempus.pt_stop_time t2, tempus.pt_trip, tempus.pt_route "
-                                                            "WHERE t1.trip_id = t2.trip_id AND t1.stop_sequence + 1 = t2.stop_sequence AND pt_trip.id = t1.trip_id "
-                                                            "AND pt_route.id = pt_trip.route_id "
-                                                            "AND pt_trip.service_id IN "
-                                                            "("
-                                                            "	(WITH calend AS ("
-                                                            "		SELECT service_id, start_date, end_date, ARRAY[sunday, monday, tuesday, wednesday, thursday, friday, saturday] AS days "
-                                                            "		FROM tempus.pt_calendar	)"
-                                                            "	SELECT service_id "
-                                                            "		FROM calend "
-                                                            "		WHERE days[(SELECT EXTRACT(dow FROM TIMESTAMP '%1%')+1)] AND start_date <= '%1%' AND end_date >= '%1%' ) "
-                                                            "EXCEPT ( "
-                                                            "	SELECT service_id "
-                                                            "		FROM tempus.pt_calendar_date "
-                                                            "		WHERE calendar_date='%1%' AND exception_type=2"
-                                                            "	) "
-                                                            "UNION ("
-                                                            "	SELECT service_id "
-                                                            "		FROM tempus.pt_calendar_date	"
-                                                            "		WHERE calendar_date='%1%' AND exception_type=1"
-                                                            "	)"
-                                                            ")") % boost::gregorian::to_simple_string(s_.current_day) ).str() ); 
-				
-                for ( size_t i = 0; i < res.size(); i++ ) {
-                    PublicTransport::Vertex departure, arrival; 
-                    PublicTransport::Edge e; 
-                    bool found;
-                    departure = vertex_from_id_[ res[i][0].as<db_id_t>() ];
-                    arrival = vertex_from_id_[ res[i][1].as<db_id_t>() ]; 
-                    boost::tie( e, found ) = boost::edge( departure, arrival, pt_graph );
-                    TimetableData t, rt; 
-                    t.trip_id = res[i][2].as<int>();
-                    int mode_id = res[i][3].as<int>();
-                    double departure_time = res[i][4].as<double>();
-                    double arrival_time = res[i][5].as<double>();
-                    t.arrival_time = arrival_time;
-                    s_.timetable.insert( std::make_pair(e, std::map<int, std::map<double, TimetableData> >() ) );
-                    s_.timetable[e].insert( std::make_pair( mode_id, std::map<double, TimetableData>() ));
-                    s_.timetable[e][mode_id].insert( std::make_pair( departure_time, t ) );
+                // cache graph id to descriptor
+                // FIXME - integrate the cache into the graphs ?
+                std::map<db_id_t, PublicTransport::Vertex> vertex_from_id_;
+                PublicTransport::Graph::vertex_iterator vit, vend;
+                for ( boost::tie( vit, vend ) = vertices( pt_graph ); vit != vend; ++vit ) {
+                    vertex_from_id_[ pt_graph[*vit].db_id() ] = *vit;
+                }
 
-                    // reverse timetable
-                    rt.trip_id = t.trip_id;
-                    rt.arrival_time = departure_time;
+                if (timetable_frequency_ == 0) // timetable model
+                {
+                    // Charging necessary timetable data for request processing
+                    Db::Result res = db_.exec( ( boost::format( "SELECT t1.stop_id as origin_stop, t2.stop_id as destination_stop, "
+                                                                "t1.trip_id, pt_route.transport_mode, extract(epoch from t1.arrival_time)/60 as departure_time, extract(epoch from t2.departure_time)/60 as arrival_time "
+                                                                "FROM tempus.pt_stop_time t1, tempus.pt_stop_time t2, tempus.pt_trip, tempus.pt_route "
+                                                                "WHERE t1.trip_id = t2.trip_id AND t1.stop_sequence + 1 = t2.stop_sequence AND pt_trip.id = t1.trip_id "
+                                                                "AND pt_route.id = pt_trip.route_id "
+                                                                "AND pt_trip.service_id IN "
+                                                                "("
+                                                                "	(WITH calend AS ("
+                                                                "		SELECT service_id, start_date, end_date, ARRAY[sunday, monday, tuesday, wednesday, thursday, friday, saturday] AS days "
+                                                                "		FROM tempus.pt_calendar	)"
+                                                                "	SELECT service_id "
+                                                                "		FROM calend "
+                                                                "		WHERE days[(SELECT EXTRACT(dow FROM TIMESTAMP '%1%')+1)] AND start_date <= '%1%' AND end_date >= '%1%' ) "
+                                                                "EXCEPT ( "
+                                                                "	SELECT service_id "
+                                                                "		FROM tempus.pt_calendar_date "
+                                                                "		WHERE calendar_date='%1%' AND exception_type=2"
+                                                                "	) "
+                                                                "UNION ("
+                                                                "	SELECT service_id "
+                                                                "		FROM tempus.pt_calendar_date	"
+                                                                "		WHERE calendar_date='%1%' AND exception_type=1"
+                                                                "	)"
+                                                                ")") % boost::gregorian::to_simple_string(s_.current_day) ).str() );
 
-                    s_.rtimetable.insert( std::make_pair(e, std::map<int, std::map<double, TimetableData> >() ) );
-                    s_.rtimetable[e].insert( std::make_pair( mode_id, std::map<double, TimetableData>() ));
-                    s_.rtimetable[e][mode_id].insert( std::make_pair( arrival_time, rt ) );
+                    for ( size_t i = 0; i < res.size(); i++ ) {
+                        PublicTransport::Vertex departure, arrival;
+                        PublicTransport::Edge e;
+                        bool found;
+                        departure = vertex_from_id_[ res[i][0].as<db_id_t>() ];
+                        arrival = vertex_from_id_[ res[i][1].as<db_id_t>() ];
+                        boost::tie( e, found ) = boost::edge( departure, arrival, pt_graph );
+                        TimetableData t, rt;
+                        t.trip_id = res[i][2].as<int>();
+                        int mode_id = res[i][3].as<int>();
+                        double departure_time = res[i][4].as<double>();
+                        double arrival_time = res[i][5].as<double>();
+                        t.arrival_time = arrival_time;
+                        s_.timetable.insert( std::make_pair(e, std::map<int, std::map<double, TimetableData> >() ) );
+                        s_.timetable[e].insert( std::make_pair( mode_id, std::map<double, TimetableData>() ));
+                        s_.timetable[e][mode_id].insert( std::make_pair( departure_time, t ) );
+
+                        // reverse timetable
+                        rt.trip_id = t.trip_id;
+                        rt.arrival_time = departure_time;
+
+                        s_.rtimetable.insert( std::make_pair(e, std::map<int, std::map<double, TimetableData> >() ) );
+                        s_.rtimetable[e].insert( std::make_pair( mode_id, std::map<double, TimetableData>() ));
+                        s_.rtimetable[e][mode_id].insert( std::make_pair( arrival_time, rt ) );
+                    }
+                }
+                else if (timetable_frequency_ == 1) // frequency model
+                {
+                    // Charging necessary frequency data for request processing
+                    Db::Result res = db_.exec( ( boost::format( "SELECT t1.stop_id as origin_stop, t2.stop_id as destination_stop, "
+                                                                "t1.trip_id, pt_route.transport_mode, extract(epoch from pt_frequency.start_time)/60 as start_time, extract(epoch from pt_frequency.end_time)/60 as end_time, "
+                                                                "pt_frequency.headway_secs/60 as headway, extract(epoch from t2.departure_time - t1.arrival_time)/60 as travel_time "
+                                                                "FROM tempus.pt_stop_time t1, tempus.pt_stop_time t2, tempus.pt_trip, tempus.pt_frequency, tempus.pt_route "
+                                                                "WHERE t1.trip_id=t2.trip_id AND t1.stop_sequence + 1 = t2.stop_sequence AND pt_trip.id=t1.trip_id AND pt_frequency.trip_id = t1.trip_id "
+                                                                "AND pt_route.id = pt_trip.route_id "
+                                                                "AND pt_trip.service_id IN "
+                                                                "("
+                                                                "	(WITH calend AS ("
+                                                                "		SELECT service_id, start_date, end_date, ARRAY[sunday, monday, tuesday, wednesday, thursday, friday, saturday] AS days "
+                                                                "		FROM tempus.pt_calendar	)"
+                                                                "	SELECT service_id "
+                                                                "		FROM calend "
+                                                                "		WHERE days[(SELECT EXTRACT(dow FROM TIMESTAMP '%1%')+1)] AND start_date <= '%1%' AND end_date >= '%1%' ) "
+                                                                "EXCEPT ( "
+                                                                "	SELECT service_id "
+                                                                "		FROM tempus.pt_calendar_date "
+                                                                "		WHERE calendar_date='%1%' AND exception_type=2"
+                                                                "	) "
+                                                                "UNION ("
+                                                                "	SELECT service_id "
+                                                                "		FROM tempus.pt_calendar_date	"
+                                                                "		WHERE calendar_date='%1%' AND exception_type=1"
+                                                                "	)"
+                                                                ")") % boost::gregorian::to_simple_string(s_.current_day) ).str() );
+                    for ( size_t i = 0; i < res.size(); i++ ) {
+                        PublicTransport::Vertex departure, arrival;
+                        PublicTransport::Edge e;
+                        bool found;
+                        departure = vertex_from_id_[ res[i][0].as<db_id_t>() ];
+                        arrival = vertex_from_id_[ res[i][1].as<db_id_t>() ];
+                        boost::tie( e, found ) = boost::edge( departure, arrival, pt_graph );
+
+                        FrequencyData f;
+                        f.trip_id = res[i][2].as<int>();
+                        int mode_id = res[i][3].as<int>();
+                        f.end_time = res[i][5].as<double>();
+                        f.headway = res[i][6].as<double>();
+                        f.travel_time = res[i][7].as<double>();
+                        double start_time = res[i][4].as<double>();
+
+                        s_.frequency.insert( std::make_pair(e, map<int, std::map<double, FrequencyData> >() ) );
+                        s_.frequency[e].insert( std::make_pair( mode_id, std::map<double, FrequencyData>() ) );
+                        s_.frequency[e][mode_id].insert( std::make_pair( start_time, f ) );
+
+                        // reverse frequency data
+                        FrequencyData rf;
+                        rf.trip_id = f.trip_id;
+                        rf.end_time = start_time;
+                        rf.headway = f.headway;
+                        rf.travel_time = f.travel_time;
+
+                        s_.rfrequency.insert( std::make_pair(e, map<int, std::map<double, FrequencyData> >() ) );
+                        s_.rfrequency[e].insert( std::make_pair( mode_id, std::map<double, FrequencyData>() ) );
+                        s_.rfrequency[e][mode_id].insert( std::make_pair( f.end_time, rf ) );
+                    }
                 }
             }
-            else if (timetable_frequency_ == 1) // frequency model
-            {
-                // Charging necessary frequency data for request processing 
-                Db::Result res = db_.exec( ( boost::format( "SELECT t1.stop_id as origin_stop, t2.stop_id as destination_stop, "
-                                                            "t1.trip_id, pt_route.transport_mode, extract(epoch from pt_frequency.start_time)/60 as start_time, extract(epoch from pt_frequency.end_time)/60 as end_time, "
-                                                            "pt_frequency.headway_secs/60 as headway, extract(epoch from t2.departure_time - t1.arrival_time)/60 as travel_time "
-                                                            "FROM tempus.pt_stop_time t1, tempus.pt_stop_time t2, tempus.pt_trip, tempus.pt_frequency, tempus.pt_route "
-                                                            "WHERE t1.trip_id=t2.trip_id AND t1.stop_sequence + 1 = t2.stop_sequence AND pt_trip.id=t1.trip_id AND pt_frequency.trip_id = t1.trip_id "
-                                                            "AND pt_route.id = pt_trip.route_id "
-                                                            "AND pt_trip.service_id IN "
-                                                            "("
-                                                            "	(WITH calend AS ("
-                                                            "		SELECT service_id, start_date, end_date, ARRAY[sunday, monday, tuesday, wednesday, thursday, friday, saturday] AS days "
-                                                            "		FROM tempus.pt_calendar	)"
-                                                            "	SELECT service_id "
-                                                            "		FROM calend "
-                                                            "		WHERE days[(SELECT EXTRACT(dow FROM TIMESTAMP '%1%')+1)] AND start_date <= '%1%' AND end_date >= '%1%' ) "
-                                                            "EXCEPT ( "
-                                                            "	SELECT service_id "
-                                                            "		FROM tempus.pt_calendar_date "
-                                                            "		WHERE calendar_date='%1%' AND exception_type=2"
-                                                            "	) "
-                                                            "UNION ("
-                                                            "	SELECT service_id "
-                                                            "		FROM tempus.pt_calendar_date	"
-                                                            "		WHERE calendar_date='%1%' AND exception_type=1"
-                                                            "	)"
-                                                            ")") % boost::gregorian::to_simple_string(s_.current_day) ).str() ); 
-                for ( size_t i = 0; i < res.size(); i++ ) {
-                    PublicTransport::Vertex departure, arrival; 
-                    PublicTransport::Edge e; 
-                    bool found; 
-                    departure = vertex_from_id_[ res[i][0].as<db_id_t>() ];
-                    arrival = vertex_from_id_[ res[i][1].as<db_id_t>() ];
-                    boost::tie( e, found ) = boost::edge( departure, arrival, pt_graph );
 
-                    FrequencyData f; 
-                    f.trip_id = res[i][2].as<int>();
-                    int mode_id = res[i][3].as<int>();
-                    f.end_time = res[i][5].as<double>();
-                    f.headway = res[i][6].as<double>();
-                    f.travel_time = res[i][7].as<double>();
-                    double start_time = res[i][4].as<double>();
+            std::cout << "Load speed profiles" << std::endl;
+            // load speed profiles
+            // FIXME: must take day into account
+            Db::Result res = db_.exec("SELECT road_section_id, speed_rule, begin_time, end_time, average_speed FROM\n"
+                                      "tempus.road_section_speed as ss,\n"
+                                      "tempus.road_daily_profile as p\n"
+                                      "WHERE\n"
+                                      "p.profile_id = ss.profile_id");
 
-                    s_.frequency.insert( std::make_pair(e, map<int, std::map<double, FrequencyData> >() ) );
-                    s_.frequency[e].insert( std::make_pair( mode_id, std::map<double, FrequencyData>() ) );
-                    s_.frequency[e][mode_id].insert( std::make_pair( start_time, f ) );
+            for ( size_t i = 0; i < res.size(); i++ ) {
+                db_id_t road_section = res[i][0].as<db_id_t>();
+                int speed_rule = res[i][1].as<int>();
+                double begin_time = res[i][2].as<double>();
+                double end_time = res[i][3].as<double>();
+                double speed = res[i][4].as<double>();
 
-                    // reverse frequency data
-                    FrequencyData rf;
-                    rf.trip_id = f.trip_id;
-                    rf.end_time = start_time;
-                    rf.headway = f.headway;
-                    rf.travel_time = f.travel_time;
-
-                    s_.rfrequency.insert( std::make_pair(e, map<int, std::map<double, FrequencyData> >() ) );
-                    s_.rfrequency[e].insert( std::make_pair( mode_id, std::map<double, FrequencyData>() ) );
-                    s_.rfrequency[e][mode_id].insert( std::make_pair( f.end_time, rf ) );
-                }
+                s_.speed_profile.add_period( road_section, static_cast<TransportModeSpeedRule>(speed_rule), begin_time, end_time-begin_time, speed );
             }
-        }
-    
-        std::cout << "Load speed profiles" << std::endl;
-        // load speed profiles
-        // FIXME: must take day into account
-        Db::Result res = db_.exec("SELECT road_section_id, speed_rule, begin_time, end_time, average_speed FROM\n"
-                                  "tempus.road_section_speed as ss,\n"
-                                  "tempus.road_daily_profile as p\n"
-                                  "WHERE\n"
-                                  "p.profile_id = ss.profile_id");
-            
-        for ( size_t i = 0; i < res.size(); i++ ) {
-            db_id_t road_section = res[i][0].as<db_id_t>();
-            int speed_rule = res[i][1].as<int>();
-            double begin_time = res[i][2].as<double>();
-            double end_time = res[i][3].as<double>();
-            double speed = res[i][4].as<double>();
-            
-            s_.speed_profile.add_period( road_section, static_cast<TransportModeSpeedRule>(speed_rule), begin_time, end_time-begin_time, speed );
         }
     }
-        
+
     // Update timer for preprocessing
     time_+=timer.elapsed();
 }
-        
+
 void DynamicMultiPlugin::process()
 {
     // Initialize timer for algo processing time
@@ -455,7 +469,7 @@ void DynamicMultiPlugin::process()
     // Initialize the potential map
     // adaptation to a property map : infinite default value
     associative_property_map_default_value< PotentialMap > potential_pmap( potential_map_, std::numeric_limits<double>::max() );
-        
+
     // Initialize the predecessor map
     boost::associative_property_map< PredecessorMap > pred_pmap( pred_map_ );  // adaptation to a property map
 
@@ -573,16 +587,16 @@ void DynamicMultiPlugin::process()
         }
         path_found = true;
     }
-        
+
     metrics_[ "iterations" ] = iterations_;
-		
+
     time_ += timer.elapsed();
     time_algo_ += timer.elapsed();
     metrics_[ "time_s" ] = time_;
     metrics_[ "time_algo_s" ] = time_algo_;
 
     if (!path_found) {
-        throw std::runtime_error( "No path found" );                
+        throw std::runtime_error( "No path found" );
     }
 
     if ( !reversed ) {
@@ -594,12 +608,12 @@ void DynamicMultiPlugin::process()
         add_roadmap( path, /* reverse */ true );
     }
 }
-    
+
 Path DynamicMultiPlugin::reorder_path( Triple departure, Triple arrival, bool reverse )
 {
-    Path path; 
+    Path path;
     Triple current = arrival;
-    bool found = true; 
+    bool found = true;
 
     while ( current.vertex != departure.vertex ) {
         if (!reverse) {
@@ -614,7 +628,7 @@ Path DynamicMultiPlugin::reorder_path( Triple departure, Triple arrival, bool re
             break;
         }
 
-        current = pred_map_[ current ]; 
+        current = pred_map_[ current ];
     }
 
     if ( !found ) {
@@ -627,7 +641,7 @@ Path DynamicMultiPlugin::reorder_path( Triple departure, Triple arrival, bool re
     else {
         path.push_back( departure );
     }
-    return path; 
+    return path;
 }
 
 std::string sec2hm( double s )
@@ -635,10 +649,10 @@ std::string sec2hm( double s )
     double s2 = s < 0 ? -s: s;
     return (s<0?"-":"") + (boost::format("%02d:%02d:%02d") % (int(s2)/60) % (int(s2) % 60) % int((s2-int(s2)) * 60)).str();
 }
-    
+
 void DynamicMultiPlugin::add_roadmap( const Path& path, bool reverse )
 {
-    result_.push_back( Roadmap() ); 
+    result_.push_back( Roadmap() );
     Roadmap& roadmap = result_.back();
 
     std::list< Triple >::const_iterator it = path.begin();
@@ -731,7 +745,7 @@ void DynamicMultiPlugin::add_roadmap( const Path& path, bool reverse )
             Roadmap::RoadStep* step = static_cast<Roadmap::RoadStep*>( mstep.get() );
             Road::Edge e;
             bool found = false;
-            boost::tie( e, found ) = edge( it->vertex.road_vertex(), next->vertex.road_vertex(), *it->vertex.road_graph() ); 
+            boost::tie( e, found ) = edge( it->vertex.road_vertex(), next->vertex.road_vertex(), *it->vertex.road_graph() );
 
             if ( !found ) {
                 throw std::runtime_error( (boost::format("Can't find the road edge ! %d %d") % it->vertex.road_vertex() % next->vertex.road_vertex()).str() );
@@ -745,7 +759,7 @@ void DynamicMultiPlugin::add_roadmap( const Path& path, bool reverse )
         else if ( it->vertex.type() == Multimodal::Vertex::PublicTransport && next->vertex.type() == Multimodal::Vertex::PublicTransport ) {
             mstep.reset( new Roadmap::PublicTransportStep() );
             Roadmap::PublicTransportStep* step = static_cast<Roadmap::PublicTransportStep*>( mstep.get() );
-				
+
             step->set_transport_mode( it->mode );
             step->set_departure_stop( it->vertex.pt_vertex() );
             step->set_arrival_stop( next->vertex.pt_vertex() );
@@ -754,7 +768,7 @@ void DynamicMultiPlugin::add_roadmap( const Path& path, bool reverse )
             step->set_arrival_time( potential_map_[*next] );
             step->set_trip_id(trip_map_[ *next ]);
             step->set_wait(wait_map_[ *next ]);
-				
+
             // find the network_id
             for ( Multimodal::Graph::PublicTransportGraphList::const_iterator nit = graph_.public_transports().begin(); nit != graph_.public_transports().end(); ++nit ) {
                 if ( it->vertex.pt_graph() == nit->second ) {
@@ -816,7 +830,7 @@ void DynamicMultiPlugin::add_roadmap( const Path& path, bool reverse )
 }
 
 StaticVariables DynamicMultiPlugin::s_;
-} 
+}
 
 DECLARE_TEMPUS_PLUGIN( "dynamic_multi_plugin", Tempus::DynamicMultiPlugin )
 
