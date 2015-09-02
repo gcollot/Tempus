@@ -22,6 +22,7 @@
 #include <boost/pending/indirect_cmp.hpp>
 #include <boost/heap/d_ary_heap.hpp>
 #include <boost/heap/binomial_heap.hpp>
+#include <boost/container/deque.hpp>
 
 #include "reverse_multimodal_graph.hh"
 
@@ -159,6 +160,130 @@ struct HeuristicCompare
 
             vis.finish_vertex( min_object, graph ); 
         }
-    }
-	
+    } // end label-setting algorithm
+
+
+    //
+    // Implementation of the Pape algorithm (label-correcting with double-ended queue) for a graph and an automaton
+	template < class NetworkGraph,
+			   class Automaton,
+			   class Object, 
+			   class PredecessorMap, 
+			   class PotentialMap,
+			   class CostCalculator, 
+			   class TripMap, 
+			   class WaitMap, 
+			   class Visitor>
+	void combined_lc_algorithm_no_init(
+									   const NetworkGraph& graph,
+									   const Automaton& automaton,
+									   Object source_object,
+									   PredecessorMap predecessor_map, 
+									   PotentialMap potential_map,
+									   CostCalculator cost_calculator, 
+									   TripMap trip_map, 
+									   WaitMap wait_map, 
+									   WaitMap shift_map, 
+									   const std::vector<db_id_t>& request_allowed_modes,
+									   Visitor vis,
+									   boost::function<double (const Multimodal::Vertex&)> heuristic )
+	{
+		typedef boost::container::deque< Object > VertexQueue;
+		VertexQueue vertex_queue( ); 
+		vertex_queue.push_back( source_object ); 
+		vis.discover_vertex( source_object, graph );
+
+		Object current_object; 
+
+		while ( !vertex_queue.empty() ) {
+			current_object = vertex_queue.front();
+			vis.examine_vertex( current_object, graph );
+			vertex_queue.pop_front();
+
+			double current_pi = get( potential_map, current_object );
+			
+			BGL_FORALL_OUTEDGES_T( current_object.vertex, current_edge, graph, NetworkGraph ) {
+				vis.examine_edge( current_edge, graph );
+
+				typename Automaton::State s;
+				{
+					bool found;
+					boost::tie( s, found ) = automaton.find_transition( current_object.state, current_edge.road_edge() );
+					// if not found, s == 0
+				}
+
+				db_id_t initial_trip_id = get( trip_map, current_object );
+
+				Object new_object;
+				new_object.vertex = target(current_edge, graph);
+				new_object.state = s;
+
+				for ( size_t i = 0; i < request_allowed_modes.size(); i++ )
+				{
+					db_id_t mode_id = request_allowed_modes[i];
+					boost::optional<TransportMode> mode;
+					mode = graph.transport_mode(mode_id);
+					BOOST_ASSERT(mode);
+
+					// if this mode is not allowed on the current edge, skip it
+					if ( ! (current_edge.traffic_rules() & mode->traffic_rules() ) ) {
+						vis.edge_not_relaxed( current_edge, mode_id, graph );
+						continue;
+					}
+
+					new_object.mode = mode_id;
+
+					double new_pi = get( potential_map, new_object );
+					// don't forget to set to 0
+					db_id_t final_trip_id = 0;
+					double wait_time;
+					double initial_shift_time, final_shift_time;
+
+					// compute the time needed to transfer from one mode to another
+					double cost = cost_calculator.transfer_time( graph, current_edge, current_object.mode, new_object.mode );
+					if ( cost < std::numeric_limits<double>::max() )
+					{
+						initial_shift_time = get( shift_map, current_object );
+						// will update final_trip_id and wait_time
+						double travel_time = cost_calculator.travel_time( graph,
+																		  current_edge,
+																		  mode_id,
+																		  current_pi,
+																		  initial_shift_time,
+																		  final_shift_time,
+																		  initial_trip_id,
+																		  final_trip_id,
+																		  wait_time );
+						cost += travel_time;
+						if ( ( cost < std::numeric_limits<double>::max() ) && ( s != current_object.state ) ) {
+							cost += penalty( automaton.automaton_graph_, s, mode->traffic_rules() ) ;
+						}
+					}
+
+					if ( ( cost < std::numeric_limits<double>::max() ) && ( current_pi + cost < new_pi ) ) {
+						vis.edge_relaxed( current_edge, mode_id, graph ); 
+
+						if ( new_pi < std::numeric_limits<double>::max() )
+							vertex_queue.push_front( new_object );
+						else vertex_queue.push_back( new_object ); 
+						
+						put( potential_map, new_object, current_pi + cost ); 
+						put( trip_map, new_object, final_trip_id ); 
+
+						put( predecessor_map, new_object, current_object );
+						put( wait_map, new_object, wait_time ); 
+						put( shift_map, new_object, final_shift_time ); 
+						
+						vis.discover_vertex( new_object, graph );
+					}
+					else {
+						vis.edge_not_relaxed( current_edge, mode_id, graph );
+					}
+				}
+			}
+
+			vis.finish_vertex( current_object, graph ); 
+		}
+	} // end label-correcting algorithm
+
 }// end namespace

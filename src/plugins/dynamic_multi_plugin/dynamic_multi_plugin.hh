@@ -91,6 +91,7 @@ protected:
     double car_parking_search_time_; // Parking search time for cars
     bool use_speed_profiles_;
     bool park_at_destination_;
+    int algorithm_; // Type of algorithm used : 1 for label-setting (Dijkstra), 2 for label-correcting (Pape)
 
     // Plugin metrics
     int iterations_; // Number of iterations
