@@ -712,9 +712,4 @@ where
    s1.stop_from is null and
    s2.stop_to is null and
    stop2.parent_station is null
-)
-;
-
-
--- Vacuuming database
-VACUUM FULL ANALYSE;
+);

@@ -90,6 +90,7 @@ protected:
     double cycling_speed_; // Average cycling speed
     double car_parking_search_time_; // Parking search time for cars
     bool use_speed_profiles_;
+    bool park_at_destination_;
 
     // Plugin metrics
     int iterations_; // Number of iterations
