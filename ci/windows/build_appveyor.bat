@@ -6,6 +6,8 @@ IF /I "%platform%"=="x86" ECHO x86 && CALL "C:\Program Files (x86)\Microsoft Vis
 IF %ERRORLEVEL% NEQ 0 GOTO ERROR
 
 set BOOST_ROOT=C:\Libraries\boost_1_59_0
+dir c:\libraries\boost
+dir c:\libraries\boost_1_59_0
 
 echo Running cmake...
 cd c:\projects\tempus
