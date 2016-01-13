@@ -5,11 +5,7 @@ IF /I "%platform%"=="x64" ECHO x64 && CALL "C:\Program Files (x86)\Microsoft Vis
 IF /I "%platform%"=="x86" ECHO x86 && CALL "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x86
 IF %ERRORLEVEL% NEQ 0 GOTO ERROR
 
-ECHO Downloading boost ...
-curl -o boost.exe "http://iweb.dl.sourceforge.net/project/boost/boost-binaries/1.59.0/boost_1_59_0-msvc-14.0-%platform%.exe"
-echo launching
-boost.exe /DIR=C:\libs\boost_1_59_0 /verysilent
-set BOOST_ROOT="C:/libs/boost_1_9_0"
+set BOOST_ROOT=C:\Libraries\boost_1_59_0
 
 echo Running cmake...
 cd c:\projects\tempus
