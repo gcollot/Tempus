@@ -6,7 +6,7 @@ IF /I "%platform%"=="x86" ECHO x86 && CALL "C:\Program Files (x86)\Microsoft Vis
 IF %ERRORLEVEL% NEQ 0 GOTO ERROR
 
 ECHO Downloading boost ...
-curl -o boost.exe -fsS "http://iweb.dl.sourceforge.net/project/boost/boost-binaries/1.59.0/boost_1_59_0-msvc-14.0-%platform%".exe
+curl -o boost.exe "http://iweb.dl.sourceforge.net/project/boost/boost-binaries/1.59.0/boost_1_59_0-msvc-14.0-%platform%.exe"
 echo launching
 boost.exe /DIR=C:\libs\boost_1_59_0 /verysilent
 set BOOST_ROOT="C:/libs/boost_1_9_0"
