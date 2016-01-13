@@ -10,3 +10,19 @@ cd c:\projects\tempus
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_DOC=OFF -DBUILD_OSM2SHP=OFF -DBUILD_QGIS_PLUGIN=OFF -DBUILD_WPS=OFF
 
 nmake
+
+GOTO DONE
+
+
+
+:ERROR
+ECHO ~~~~~~~~~~~~~~~~~~~~~~ ERROR %~f0 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ECHO ERRORLEVEL^: %ERRORLEVEL%
+SET EL=%ERRORLEVEL%
+
+:DONE
+ECHO ~~~~~~~~~~~~~~~~~~~~~~ DONE %~f0 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ECHO build started^: %NODE_GDAL_BUILD_START_TIME%
+ECHO build finished^: %NODE_GDAL_BUILD_FINISH_TIME%
+
+EXIT /b %EL%
