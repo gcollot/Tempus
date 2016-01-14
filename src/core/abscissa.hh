@@ -18,6 +18,7 @@
 #ifndef TEMPUS_ABSCISSA_HH
 #define TEMPUS_ABSCISSA_HH
 
+#include <cstdint>
 #include <istream>
 #include <boost/assert.hpp>
 
