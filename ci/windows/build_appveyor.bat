@@ -5,12 +5,8 @@ IF /I "%platform%"=="x64" ECHO x64 && CALL "C:\Program Files (x86)\Microsoft Vis
 IF /I "%platform%"=="x86" ECHO x86 && CALL "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x86
 IF %ERRORLEVEL% NEQ 0 GOTO ERROR
 
-dir c:\libraries\boost
-dir c:\libraries\boost_1_59_0
 set BOOST_ROOT=C:\Libraries\boost_1_59_0
 set BOOST_LIBRARYDIR=C:\Libraries\boost_1_59_0\lib64-msvc-14.0
-rem set BOOST_ROOT=C:\Libraries\boost
-rem set BOOST_LIBRARYDIR=C:\Libraries\boost\lib64-msvc-12.0
 
 echo Running cmake...
 cd c:\projects\tempus
