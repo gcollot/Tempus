@@ -7,12 +7,12 @@ services:
 
 install:
   - ci\windows\build_appveyor.bat
-  - 7z x "c:\projects\tempus\data\tempus_test_db\tempus_test_db.sql.zip" -o"c:\projects\tempus\data\tempus_test_db\tempus_test_db.sql" -y
-  - icacls c:\projects\tempus\data\tempus_test_db\tempus_test_db.sql /reset
+  - 7z x "c:\projects\tempus\data\tempus_test_db\tempus_test_db.sql.zip" -o"c:\tempus_test_db.sql" -y
 
 test: off
 deploy: off
 
 build_script:
   - cacls c:\projects\tempus\data\tempus_test_db\*.sql
+  - cacls c:\*.sql
   - ci\windows\tests.bat
