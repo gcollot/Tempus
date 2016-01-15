@@ -27,7 +27,5 @@ SET EL=%ERRORLEVEL%
 
 :DONE
 ECHO ~~~~~~~~~~~~~~~~~~~~~~ DONE %~f0 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-ECHO build started^: %NODE_GDAL_BUILD_START_TIME%
-ECHO build finished^: %NODE_GDAL_BUILD_FINISH_TIME%
 
 EXIT /b %EL%

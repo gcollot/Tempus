@@ -10,7 +10,8 @@ echo install postgis extension
 psql -c "create extension postgis;" tempus_test_db
 echo unzip data
 cd data\tempus_test_db
-7z x tempus_test_db.sql.zip -o tempus_test_db.sql -y
+cscript //nologo unzip.vbs tempus_test_db.sql.zip .
+rem 7z x tempus_test_db.sql.zip -o tempus_test_db.sql -y
 echo populate test db
 psql tempus_test_db < tempus_test_db.sql
 echo apply patches
