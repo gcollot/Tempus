@@ -8,7 +8,7 @@ IF %ERRORLEVEL% NEQ 0 GOTO ERROR
 dir c:\libraries\boost
 dir c:\libraries\boost_1_59_0
 set BOOST_ROOT=C:\Libraries\boost_1_59_0
-set BOOST_LIBRARYDIR=C:\Libraries\boost_1_59_0\lib64-msvc-12.0
+set BOOST_LIBRARYDIR=C:\Libraries\boost_1_59_0\lib64-msvc-14.0
 rem set BOOST_ROOT=C:\Libraries\boost
 rem set BOOST_LIBRARYDIR=C:\Libraries\boost\lib64-msvc-12.0
 
