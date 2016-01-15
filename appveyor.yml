@@ -8,9 +8,8 @@ services:
 install:
   - ci\windows\build_appveyor.bat
   - 7z x "c:\projects\tempus\data\tempus_test_db\tempus_test_db.sql.zip" -o"c:\projects\tempus\data\tempus_test_db\tempus_test_db.sql" -y
-  - ps: Get-Acl c:\projects\tempus\data\tempus_test_db\*.sql
-  - cacls c:\projects\tempus\data\tempus_test_db\*.sql
-  - cacls c:\projects\tempus\data\tempus_test_db\tempus_test_db.sql /P BUILTIN\Users:R
+  - icacls c:\projects\tempus\data\tempus_test_db\patch.001.sql /save aclfile
+  - icacls c:\projects\tempus\data\tempus_test_db\tempus_test_db.sql /restore aclfile
 
 test: off
 deploy: off
