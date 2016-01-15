@@ -5,9 +5,8 @@ platform: x64
 services:
   - postgresql93
 
-install:
+build:
   - ci\windows\build_appveyor.bat
 
-build: off
 test: off
 deploy: off
