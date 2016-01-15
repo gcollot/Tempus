@@ -13,13 +13,13 @@ Abscissa::Abscissa( float v )
 
 Abscissa::operator float() const
 {
-    return float(d_) / 65535.0;
+    return float(d_) / float(65535.0);
 }
 
 
 std::istream& operator>>( std::istream& istr, Abscissa& a )
 {
-    double d;
+    float d;
     istr >> d;
     a = d;
     return istr;
