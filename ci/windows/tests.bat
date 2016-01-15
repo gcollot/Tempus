@@ -9,6 +9,7 @@ createdb tempus_test_db
 echo install postgis extension
 psql -c "create extension postgis;" tempus_test_db
 echo populate test db
+cd data\tempus_test_db
 psql tempus_test_db < tempus_test_db.sql
 echo apply patches
 for /r %%i in (patch.???.sql) do psql tempus_test_db < %%i
