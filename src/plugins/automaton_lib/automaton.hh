@@ -29,8 +29,14 @@
 /// The automaton is build upon sequences of forbidden movements and penalties
 /// The optimized graph (finite state machine) is constructed by following the Aho & Corasick algorithms
 
+#ifdef _WIN32
+#pragma warning(push, 0)
+#endif
 #ifndef AUTOMATION_LIB_AUTOMATON_HH
 #define AUTOMATION_LIB_AUTOMATON_HH
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 #include <boost/graph/graphviz.hpp>
 #include <boost/graph/iteration_macros.hpp>
