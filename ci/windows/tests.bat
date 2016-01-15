@@ -1,5 +1,6 @@
 @echo off
 
+cd c:\projects\tempus
 echo Populating test db ...
 SET PGUSER=postgres
 SET PGPASSWORD=Password12!
@@ -15,3 +16,4 @@ psql tempus_test_db < data\tempus\tempus_test_db\patch.001.sql
 psql tempus_test_db < data\tempus\tempus_test_db\patch.002.sql
 psql tempus_test_db < data\tempus\tempus_test_db\patch.003.sql
 
+ctest -VV
