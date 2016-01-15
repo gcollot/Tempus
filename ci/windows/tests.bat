@@ -7,10 +7,10 @@ SET PGHOST=localhost
 echo create db
 createdb tempus_test_db
 echo install postgis extension
-psql -c "create extension postgis;" tempus_test_db
+psql -c "create extension postgis" tempus_test_db
 echo populate test db
 cd data\tempus_test_db
-psql tempus_test_db < tempus_test_db.sql
+psql -f tempus_test_db.sql tempus_test_db
 echo apply patches
 for /r %%i in (patch.???.sql) do psql tempus_test_db < %%i
 cd c:\projects\tempus
