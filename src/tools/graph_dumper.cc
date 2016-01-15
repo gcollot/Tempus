@@ -122,17 +122,17 @@ int main( int argc, char* argv[] )
         dump_file = vm["dump_file"].as<string>();
     }
 
-#if __linux__
+#ifdef __linux__
     MemInfo info;
     info = get_memory_usage();
     size_t real_size = info.rss /1024 /1024;
     size_t data_size = info.data /1024 /1024;
     std::cerr << "RSS: " << real_size << "MB" << std::endl;
     std::cerr << "Data: " << data_size << "MB" << std::endl;
+    heap_usage = 0;
 #endif
 
     {
-        heap_usage = 0;
         TextProgression progression;
         VariantMap options;
         options["db/options"] = Variant::from_string(db_options);
