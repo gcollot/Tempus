@@ -2,6 +2,9 @@ clone_folder: c:\projects\tempus
 
 platform: x64
 
+services:
+  - postgresql93
+
 install:
   - ci\windows\build_appveyor.bat
 
