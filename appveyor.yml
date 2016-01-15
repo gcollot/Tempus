@@ -11,5 +11,5 @@ install:
 test: off
 deploy: off
 
-after_build:
+build_script:
   - ci\windows\tests.bat
